@@ -65,22 +65,28 @@ const notaryMinutes = Number(argValue('--notary-timeout') ?? 150);
 const notary = (...args) => spawnSync('/usr/bin/xcrun', ['notarytool', ...args, '--keychain-profile', profile, ...keychainArgs], { encoding: 'utf8' });
 const sleepSeconds = seconds => run('/bin/sleep', [String(seconds)]);
 /** Submit, then ask for the verdict every 30 s. Apple's queue can take an hour or more, and a dropped connection in the
- * middle of a long wait must not lose a submission that is still being processed, so the wait is ours, not notarytool's. */
+ * middle of a long wait must not lose a submission that is still being processed, so the wait is ours, not notarytool's.
+ * A submission is sometimes left "In Progress" for hours while a fresh one of the same file is answered in minutes, so
+ * one that has had no verdict for 40 minutes gets a second copy beside it (three at most); the first verdict counts. */
 function notarize(file) {
-  const submitted = notary('submit', file, '--output-format', 'json');
-  let id = null; try { id = JSON.parse(submitted.stdout).id; } catch { /* no submission id */ }
-  if (submitted.status !== 0 || !id) throw new Error(`could not submit ${basename(file)}: ${(submitted.stderr || submitted.stdout || '').trim().slice(0, 400)}`);
-  console.log(`submitted ${basename(file)}: ${id}`);
-  const deadline = Date.now() + notaryMinutes * 60000; let status = 'In Progress', failures = 0;
-  while (status === 'In Progress') {
-    if (Date.now() > deadline) throw new Error(`notarization of ${basename(file)} (${id}) is still in progress after ${notaryMinutes} minutes; check it with: xcrun notarytool info ${id} --keychain-profile ${profile}`);
+  const submit = () => {
+    const submitted = notary('submit', file, '--output-format', 'json');
+    let id = null; try { id = JSON.parse(submitted.stdout).id; } catch { /* no submission id */ }
+    if (submitted.status !== 0 || !id) throw new Error(`could not submit ${basename(file)}: ${(submitted.stderr || submitted.stdout || '').trim().slice(0, 400)}`);
+    console.log(`submitted ${basename(file)}: ${id}`); return id;
+  };
+  const ids = [submit()], deadline = Date.now() + notaryMinutes * 60000; let nextCopy = Date.now() + 40 * 60000, failures = 0;
+  for (;;) {
+    if (Date.now() > deadline) throw new Error(`notarization of ${basename(file)} is still in progress after ${notaryMinutes} minutes; check it with: xcrun notarytool info ${ids.at(-1)} --keychain-profile ${profile}`);
+    if (ids.length < 3 && Date.now() > nextCopy) { ids.push(submit()); nextCopy = Date.now() + 40 * 60000; }
     sleepSeconds(30);
-    const info = notary('info', id, '--output-format', 'json');
-    try { status = JSON.parse(info.stdout).status; failures = 0; }
-    catch { if (++failures > 40) throw new Error(`lost contact with the notary service for ${basename(file)} (${id}): ${(info.stderr || '').trim().slice(0, 300)}`); }
+    for (const id of ids) {
+      const info = notary('info', id, '--output-format', 'json'); let status = null;
+      try { status = JSON.parse(info.stdout).status; failures = 0; } catch { if (++failures > 40 * ids.length) throw new Error(`lost contact with the notary service for ${basename(file)}: ${(info.stderr || '').trim().slice(0, 300)}`); }
+      if (status === 'Accepted') { console.log(`${basename(file)}: Accepted (${id})`); return; }
+      if (status && status !== 'In Progress') { const log = notary('log', id); console.log(log.stdout || log.stderr); throw new Error(`notarization of ${basename(file)} was not accepted (${status})`); }
+    }
   }
-  console.log(`${basename(file)}: ${status}`);
-  if (status !== 'Accepted') { const log = notary('log', id); console.log(log.stdout || log.stderr); throw new Error(`notarization of ${basename(file)} was not accepted (${status})`); }
 }
 
 const work = mkdtempSync(join(tmpdir(), 'rna-sign-')); let mounted = null;
