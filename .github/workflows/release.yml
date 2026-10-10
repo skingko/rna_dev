@@ -61,7 +61,7 @@ jobs:
         run: |
           app="dist/release/Rna Agent-${{ matrix.folder }}-${{ matrix.arch }}"
           if [ -n "${{ matrix.app }}" ]; then app="$app/${{ matrix.app }}"; fi
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a node smoke-test.mjs "$app" --app; else node smoke-test.mjs "$app" --app; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a node check-packaged-build.mjs "$app" --app; else node check-packaged-build.mjs "$app" --app; fi
       - name: Collect
         working-directory: prototypes/control-center/desktop/dist/release
         run: |

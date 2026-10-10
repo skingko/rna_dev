@@ -5,7 +5,7 @@
 //      workbench page and its script, and exits cleanly when asked.
 //   2. --app: the desktop app itself starts, brings its service up (a connection record appears in its data folder and
 //      the service answers), and the service is gone again after the app is closed.
-// Usage: node smoke-test.mjs <packaged app folder or .app> [--app]
+// Usage: node check-packaged-build.mjs <packaged app folder or .app> [--app]
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -45,8 +45,7 @@ jobs:
           npm test
           npm run build
       - name: Host tests
-        working-directory: prototypes/control-center
-        run: node --test
+        run: scripts/run-host-tests.sh 3
       - name: Desktop shell tests
         working-directory: prototypes/control-center/desktop
         run: node --test test/*.test.cjs
