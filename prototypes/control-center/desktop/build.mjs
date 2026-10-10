@@ -125,7 +125,11 @@ try {
     execFileSync('/usr/bin/codesign',['--verify','--deep','--strict','--verbose=2',appPath],{stdio:'inherit'});
     const disk = join(temporary,'disk');mkdirSync(disk);cpSync(appPath,join(disk,'Rna Agent.app'),{recursive:true,verbatimSymlinks:true});symlinkSync('/Applications',join(disk,'Applications'));
     writeFileSync(join(disk,'使用说明.txt'),`将 Rna Agent 拖到 Applications，双击启动。已有 Rna 本机服务时核对服务身份后自动连接；没有时启动应用自有后台，不导入其他目录凭据。\n菜单“复制 CLI 启动命令”可打开相同服务的终端会话。关闭窗口保留后台工作，退出只停止应用自有后台，外部服务保持运行。\n本构建仅经 ad-hoc 签名，未通过 Apple Developer ID 签名与公证。\n${firstRun}`);
-    execFileSync('/usr/bin/hdiutil',['create','-volname','Rna Agent','-srcfolder',disk,'-ov','-format','UDZO',artifact],{stdio:'inherit'});
+    // hdiutil answers "Resource busy" now and then while the system is still indexing the new folder (seen on CI runners): try again.
+    for (let attempt = 1; ; attempt++) {
+      try { execFileSync('/usr/bin/hdiutil',['create','-volname','Rna Agent','-srcfolder',disk,'-ov','-format','UDZO',artifact],{stdio:'inherit'}); break; }
+      catch (error) { if (attempt >= 5) throw error; console.warn(`hdiutil create failed (attempt ${attempt}); trying again`); execFileSync('/bin/sleep',[String(attempt * 5)]); rmSync(artifact,{force:true}); }
+    }
   } else {
     writeFileSync(join(appPath, 'README.txt'), `Rna Agent ${meta.version} (${platformName} ${targetArch})\n\n${platform === 'win32' ? 'Run "Rna Agent.exe". The background service runs while the app is open. The build is not code-signed, so Windows SmartScreen asks before the first run.' : 'Run ./"Rna Agent". If the window does not open on a distribution that restricts unprivileged user namespaces, start it with --no-sandbox or give chrome-sandbox root ownership and mode 4755.'}\nCommand line: resources/app/runtime/bin/rna${platform === 'win32' ? '.cmd' : ''}\n${firstRun}`);
     // bsdtar ships with Windows and writes .zip by extension (-a); Git's GNU tar on PATH does not.
