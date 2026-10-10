@@ -5,6 +5,10 @@
 //
 //   node sign-macos.mjs <Rna Agent.app | .dmg> --identity <certificate hash or name> [--out <folder>]
 //                       [--notary-profile <notarytool keychain profile>] [--keychain <keychain file>]
+//                       [--notarize-image] [--notary-timeout <minutes, default 150>]
+//
+// The app is notarized and stapled; the disk image is signed. Notarizing the image as well (--notarize-image) is only
+// needed to have the .dmg file itself pass Gatekeeper's check: the app inside is accepted either way.
 //
 // Nothing secret is read or printed: codesign and notarytool use the login keychain themselves.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -57,15 +61,26 @@ function makeDisk(app, destination) {
     }
   } finally { rmSync(staging, { recursive: true, force: true }); }
 }
+const notaryMinutes = Number(argValue('--notary-timeout') ?? 150);
+const notary = (...args) => spawnSync('/usr/bin/xcrun', ['notarytool', ...args, '--keychain-profile', profile, ...keychainArgs], { encoding: 'utf8' });
+const sleepSeconds = seconds => run('/bin/sleep', [String(seconds)]);
+/** Submit, then ask for the verdict every 30 s. Apple's queue can take an hour or more, and a dropped connection in the
+ * middle of a long wait must not lose a submission that is still being processed, so the wait is ours, not notarytool's. */
 function notarize(file) {
-  // notarytool prints the submission id and the verdict; a rejection exits non-zero and its log says why.
-  const result = spawnSync('/usr/bin/xcrun', ['notarytool', 'submit', file, '--keychain-profile', profile, ...keychainArgs, '--wait', '--output-format', 'json'], { encoding: 'utf8' });
-  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`; process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
-  let verdict = null; try { verdict = JSON.parse(result.stdout); } catch { /* not JSON: an error before submission */ }
-  if (result.status !== 0 || verdict?.status !== 'Accepted') {
-    if (verdict?.id) spawnSync('/usr/bin/xcrun', ['notarytool', 'log', verdict.id, '--keychain-profile', profile, ...keychainArgs], { stdio: 'inherit' });
-    throw new Error(`notarization of ${basename(file)} was not accepted (${verdict?.status ?? 'no verdict'})`);
+  const submitted = notary('submit', file, '--output-format', 'json');
+  let id = null; try { id = JSON.parse(submitted.stdout).id; } catch { /* no submission id */ }
+  if (submitted.status !== 0 || !id) throw new Error(`could not submit ${basename(file)}: ${(submitted.stderr || submitted.stdout || '').trim().slice(0, 400)}`);
+  console.log(`submitted ${basename(file)}: ${id}`);
+  const deadline = Date.now() + notaryMinutes * 60000; let status = 'In Progress', failures = 0;
+  while (status === 'In Progress') {
+    if (Date.now() > deadline) throw new Error(`notarization of ${basename(file)} (${id}) is still in progress after ${notaryMinutes} minutes; check it with: xcrun notarytool info ${id} --keychain-profile ${profile}`);
+    sleepSeconds(30);
+    const info = notary('info', id, '--output-format', 'json');
+    try { status = JSON.parse(info.stdout).status; failures = 0; }
+    catch { if (++failures > 40) throw new Error(`lost contact with the notary service for ${basename(file)} (${id}): ${(info.stderr || '').trim().slice(0, 300)}`); }
   }
+  console.log(`${basename(file)}: ${status}`);
+  if (status !== 'Accepted') { const log = notary('log', id); console.log(log.stdout || log.stderr); throw new Error(`notarization of ${basename(file)} was not accepted (${status})`); }
 }
 
 const work = mkdtempSync(join(tmpdir(), 'rna-sign-')); let mounted = null;
@@ -104,7 +119,7 @@ try {
   }
   makeDisk(app, dmg);
   run('/usr/bin/codesign', ['--force', '--timestamp', '--sign', identity, ...keychainArgs, dmg]);
-  if (profile) { notarize(dmg); run('/usr/bin/xcrun', ['stapler', 'staple', dmg]); }
+  if (profile && process.argv.includes('--notarize-image')) { notarize(dmg); run('/usr/bin/xcrun', ['stapler', 'staple', dmg]); }
   // Gatekeeper's own verdict on what a user would download.
   const assessment = spawnSync('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', '-vv', dmg], { encoding: 'utf8' });
   console.log(`${assessment.stdout}${assessment.stderr}`.trim());
