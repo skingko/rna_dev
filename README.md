@@ -10,14 +10,13 @@
 
 **Projects, not chats. An agent that keeps working in the background, remembers what happened, and tells you when it matters.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/skingko/rna_dev/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/skingko/rna_dev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/skingko/rna_dev?style=flat-square&color=5c4ee5)](https://github.com/skingko/rna_dev/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/skingko/rna_dev/total?style=flat-square&color=2ea44f)](https://github.com/skingko/rna_dev/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-f4c430?style=flat-square)](LICENSE)
 ![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555?style=flat-square)
 ![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.19-339933?style=flat-square&logo=nodedotjs&logoColor=white)
 
-[Download](#download) · [Why Rna](#why-rna) · [Features](#features) · [Quick start](#quick-start) · [Memory](#memory-with-or-without-docker) · [Web search](#web-search-six-services-one-pair-of-tools) · [Architecture](#architecture) · [FAQ](#faq) · [Docs](#documentation)
+**[Website: www.rna.dev](https://www.rna.dev)** · [Download](#download) · [Why Rna](#why-rna) · [Features](#features) · [Quick start](#quick-start) · [Memory](#memory-with-or-without-docker) · [Web search](#web-search-six-services-one-pair-of-tools) · [Architecture](#architecture) · [FAQ](#faq) · [Docs](#documentation)
 
 <br />
 
@@ -32,6 +31,8 @@
 
 Rna Agent is a desktop app and command line for working with AI agents on projects that last longer than one conversation: a game, a novel, a research topic, a codebase. You create a project, give it a folder and an introduction, and the agent keeps context across sessions, works in the background when it has something worth doing, and brings you back a short summary instead of a wall of logs.
 
+More at **[www.rna.dev](https://www.rna.dev)**.
+
 It runs on your machine. Your projects, conversations, memory and keys stay in local files; the only network traffic is to the model and search services you configure.
 
 ## Download
@@ -45,7 +46,7 @@ Get the build for your system from the [latest release](https://github.com/sking
 | Linux, x64 | `Rna-Agent-<version>-Linux-x64.tar.gz` | Preview |
 | Windows, x64 | `Rna-Agent-<version>-Windows-x64.zip` | Preview |
 
-Every release is built by [GitHub Actions](.github/workflows/release.yml) and started once on its own platform before it is published. The builds are not code-signed or notarized yet, so macOS and Windows ask for confirmation the first time you open the app (see the [release notes](.github/release-notes.md) for the one-line workarounds).
+Every release is built by [GitHub Actions](.github/workflows/release.yml) and started once on its own platform before it is published; the tests themselves run locally before a version is tagged. The builds are not code-signed or notarized yet, so macOS and Windows ask for confirmation the first time you open the app (see the [release notes](.github/release-notes.md) for the one-line workarounds).
 
 macOS is where Rna is developed and used every day. Linux and Windows builds run the same code; features that rely on macOS facilities (the command sandbox, the background service manager) are reduced there. Reports from those platforms are very welcome.
 

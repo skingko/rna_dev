@@ -10,12 +10,11 @@
 
 **以项目为单位，而不是一次对话。Agent 在后台持续工作，记得发生过什么，该找你的时候才找你。**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/skingko/rna_dev/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/skingko/rna_dev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/skingko/rna_dev?style=flat-square&color=5c4ee5)](https://github.com/skingko/rna_dev/releases/latest)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-f4c430?style=flat-square)](LICENSE)
 ![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555?style=flat-square)
 
-[下载](#下载) · [为什么用 Rna](#为什么用-rna) · [功能](#功能) · [快速开始](#快速开始) · [记忆](#记忆有无-docker-都能用) · [联网搜索](#联网搜索六种服务同一对工具) · [常见问题](#常见问题) · [文档](#文档)
+**[官网：www.rna.dev](https://www.rna.dev)** · [下载](#下载) · [为什么用 Rna](#为什么用-rna) · [功能](#功能) · [快速开始](#快速开始) · [记忆](#记忆有无-docker-都能用) · [联网搜索](#联网搜索六种服务同一对工具) · [常见问题](#常见问题) · [文档](#文档)
 
 <br />
 
@@ -29,6 +28,8 @@
 ---
 
 Rna Agent 是一个桌面应用和命令行工具，用来和 AI Agent 一起推进比一次对话更长的事情：一个游戏、一部小说、一个调研主题、一个代码库。你创建项目、指定目录并写一段介绍，之后 Agent 会跨会话保留上下文，有值得做的事时在后台继续工作，回来时给你一份简短汇总，而不是一屏日志。
+
+更多信息见官网 **[www.rna.dev](https://www.rna.dev)**。
 
 它运行在你的电脑上。项目、对话、记忆和密钥都在本地文件里；只有你配置的模型和搜索服务会收到网络请求。
 

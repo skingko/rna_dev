@@ -16,6 +16,8 @@ npm ci --prefix prototypes/control-center            # terminal support (node-pt
 
 ## Before you open a pull request
 
+Tests run on your machine; the repository has no test workflow on GitHub. The only workflow builds and publishes releases.
+
 ```bash
 (cd packages/sdk && node --test test/*.test.mjs)
 (cd prototypes/control-center && node --test)
