@@ -47,21 +47,17 @@ touches credentials or the local service's exposure, use [SECURITY.md](SECURITY.
 
 ## Signing and notarizing the macOS release
 
-The release workflow builds unsigned macOS apps (GitHub's runners do not hold a certificate). Signing is done on the
-machine that has the Developer ID certificate, from the workflow's own output:
+The release workflow signs and notarizes the macOS apps itself when five repository secrets exist (listed at the top of
+`.github/workflows/release.yml`: `APPLE_CERTIFICATE` as a base64 .p12, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`). Without them the macOS builds are left unsigned. Apple's notary queue is
+sometimes slow, so that step can take well over an hour.
+
+`desktop/sign-macos.mjs` does the same by hand, from a workflow-built dmg, on a machine that holds the certificate:
 
 ```bash
-gh release download v<version> --pattern 'Rna-Agent-*-macOS-*.dmg' --dir /tmp/rna-release
-
-# one run per architecture; --notary-profile is a profile made once with
-#   xcrun notarytool store-credentials <name>
-node prototypes/control-center/desktop/sign-macos.mjs /tmp/rna-release/Rna-Agent-<version>-macOS-arm64.dmg \
-  --identity "<Developer ID Application hash or name>" --notary-profile <name> --out /tmp/rna-signed/arm64
-
-gh release upload v<version> /tmp/rna-signed/*/Rna-Agent-*.dmg --clobber
+node prototypes/control-center/desktop/sign-macos.mjs Rna-Agent-<version>-macOS-arm64.dmg \
+  --identity "<Developer ID Application hash or name>" --notary-profile <name> --notarize-image --out ./signed
 ```
 
-The script signs every binary and bundle with the hardened runtime, takes the bundled runtime's file inventory again
-(signing changes the bytes it records), seals the app, builds the disk image, and with a profile notarizes and staples
-both the app and the image. Nothing secret is read: `codesign` and `notarytool` use the keychain themselves.
-After uploading, refresh `SHA256SUMS.txt` on the release.
+(`<name>` is a profile made once with `xcrun notarytool store-credentials <name>`.) Nothing secret is read:
+`codesign` and `notarytool` use the keychain themselves.

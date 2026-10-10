@@ -44,7 +44,7 @@ Rna Agent 是一个桌面应用和命令行工具，用来和 AI Agent 一起推
 | Linux x64 | `Rna-Agent-<版本>-Linux-x64.tar.gz` | 预览 |
 | Windows x64 | `Rna-Agent-<版本>-Windows-x64.zip` | 预览 |
 
-每个版本由 [GitHub Actions](.github/workflows/release.yml) 构建，并在各自平台上启动一次后才发布。安装包尚未做代码签名和公证，首次打开时 macOS 和 Windows 会要求确认，处理办法写在[发布说明](.github/release-notes.md)里。
+每个版本由 [GitHub Actions](.github/workflows/release.yml) 构建，并在各自平台上启动一次后才发布。macOS 版本已用 Developer ID 签名并经 Apple 公证；Linux 和 Windows 版本尚未做代码签名，Windows 首次打开时 SmartScreen 会要求确认，处理办法写在[发布说明](.github/release-notes.md)里。
 
 日常开发和使用都在 macOS 上。Linux 和 Windows 版本运行同一份代码，但依赖 macOS 能力的部分（命令沙箱、后台服务管理）在那里有所缩减，欢迎反馈。
 

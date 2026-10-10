@@ -46,7 +46,7 @@ Get the build for your system from the [latest release](https://github.com/sking
 | Linux, x64 | `Rna-Agent-<version>-Linux-x64.tar.gz` | Preview |
 | Windows, x64 | `Rna-Agent-<version>-Windows-x64.zip` | Preview |
 
-Every release is built by [GitHub Actions](.github/workflows/release.yml) and started once on its own platform before it is published; the tests themselves run locally before a version is tagged. The builds are not code-signed or notarized yet, so macOS and Windows ask for confirmation the first time you open the app (see the [release notes](.github/release-notes.md) for the one-line workarounds).
+Every release is built by [GitHub Actions](.github/workflows/release.yml) and started once on its own platform before it is published; the tests themselves run locally before a version is tagged. The macOS builds are signed with a Developer ID and notarized by Apple. The Linux and Windows builds are not code-signed yet, so Windows SmartScreen asks for confirmation the first time (see the [release notes](.github/release-notes.md)).
 
 macOS is where Rna is developed and used every day. Linux and Windows builds run the same code; features that rely on macOS facilities (the command sandbox, the background service manager) are reduced there. Reports from those platforms are very welcome.
 

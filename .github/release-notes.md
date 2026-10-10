@@ -9,7 +9,7 @@
 
 Every file is built by the [release workflow](https://github.com/skingko/rna_dev/actions/workflows/release.yml) from this tag and started once on its own platform before it is published. `SHA256SUMS.txt` lists the checksums.
 
-- **macOS**: the app is ad-hoc signed, not notarized. After moving it to Applications, right-click it and choose Open the first time, or run `xattr -dr com.apple.quarantine "/Applications/Rna Agent.app"`.
+- **macOS**: signed with a Developer ID and notarized by Apple; open the disk image and drag the app to Applications.
 - **Linux**: unpack and run `./"Rna Agent"`. On distributions that restrict unprivileged user namespaces (Ubuntu 24.04 and later), start it with `--no-sandbox`, or give `chrome-sandbox` root ownership and mode `4755`.
 - **Windows**: unpack and run `Rna Agent.exe`. The build is not code-signed, so SmartScreen asks before the first run. The background service runs while the app is open; in-app updates are not available on Windows yet.
 
