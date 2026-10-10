@@ -1,0 +1,5 @@
+# Optional workaround for Docker Desktop API-proxy/file-share deadlocks.
+# The native loopback relay forwards HTTP to this exact official container.
+services:
+  openviking:
+    ports: !reset []

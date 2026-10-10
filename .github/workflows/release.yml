@@ -1,0 +1,103 @@
+name: Release
+
+# A tag v<version> builds the desktop app for macOS, Linux and Windows, starts each packaged build once, and publishes
+# them as a GitHub release. Run by hand, it builds and tests the same packages and keeps them as workflow artifacts.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS-arm64, os: macos-latest, arch: arm64, folder: darwin, app: "Rna Agent.app" }
+          - { name: macOS-x64, os: macos-15-intel, arch: x64, folder: darwin, app: "Rna Agent.app" }
+          - { name: Linux-x64, os: ubuntu-latest, arch: x64, folder: linux, app: "" }
+          - { name: Windows-x64, os: windows-latest, arch: x64, folder: win32, app: "" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            prototypes/control-center/package-lock.json
+            prototypes/control-center/web/package-lock.json
+            prototypes/control-center/desktop/package-lock.json
+      - name: The tag names the version being built
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(node -p "require('./prototypes/control-center/desktop/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "Tag $GITHUB_REF_NAME does not match package version $version"; exit 1; fi
+      - name: Display server for the Linux app test
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0 libnss3 libxss1 libgbm1 libasound2t64 || sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0 libnss3 libxss1 libgbm1 libasound2
+      - name: Install
+        run: |
+          npm ci --prefix prototypes/control-center
+          npm ci --prefix prototypes/control-center/web
+          npm ci --prefix prototypes/control-center/desktop
+      - name: Package
+        working-directory: prototypes/control-center/desktop
+        run: npm run package -- --out dist/release --arch ${{ matrix.arch }}
+      - name: Start the packaged build once
+        working-directory: prototypes/control-center/desktop
+        run: |
+          app="dist/release/Rna Agent-${{ matrix.folder }}-${{ matrix.arch }}"
+          if [ -n "${{ matrix.app }}" ]; then app="$app/${{ matrix.app }}"; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a node smoke-test.mjs "$app" --app; else node smoke-test.mjs "$app" --app; fi
+      - name: Collect
+        working-directory: prototypes/control-center/desktop/dist/release
+        run: |
+          mkdir -p ../upload
+          cp Rna-Agent-* ../upload/
+          cp build-report.json "../upload/build-report-${{ matrix.name }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rna-agent-${{ matrix.name }}
+          path: prototypes/control-center/desktop/dist/upload/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        working-directory: artifacts
+        run: |
+          rm -f build-report-*.json
+          sha256sum Rna-Agent-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed "s/{{version}}/$version/g" .github/release-notes.md > notes.md
+          gh release create "$GITHUB_REF_NAME" artifacts/* --title "Rna Agent $version" --notes-file notes.md --generate-notes --verify-tag

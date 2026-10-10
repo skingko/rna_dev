@@ -1,0 +1,5 @@
+# Apply after candidate verification, when the host listener is available.
+services:
+  openviking:
+    ports:
+      - "127.0.0.1:1933:1933"

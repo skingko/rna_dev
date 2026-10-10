@@ -1,0 +1,49 @@
+name: rna-openviking
+
+# Official release, pinned to the registry index digest published by volcengine.
+x-openviking-image: &openviking-image ghcr.io/volcengine/openviking:v0.4.21.1@sha256:13a78525aa255f0cdb026bfdc1ab8c3a9b2baa49148aa10df061e6c2b689c15f
+
+services:
+  model-fixture:
+    image: rna-openviking-model-fixture:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.fixture
+    container_name: rna-openviking-model-fixture
+    entrypoint: ["python", "/fixture/model_fixture.py"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  openviking:
+    image: *openviking-image
+    container_name: rna-openviking
+    ports:
+      - "127.0.0.1:1933:1933"
+    volumes:
+      - data:/app/.openviking
+    environment:
+      OPENVIKING_WITH_BOT: "0"
+      OPENVIKING_SERVER_PORT: "1933"
+    depends_on:
+      model-fixture:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "openviking-entrypoint", "--healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+# The fixture is reachable only on this dedicated Docker network, not the host.
+networks:
+  default:
+    name: rna-openviking-test
+
+volumes:
+  data:
+    name: rna-openviking-data

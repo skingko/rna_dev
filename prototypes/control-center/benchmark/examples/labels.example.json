@@ -1,0 +1,9 @@
+{
+  "schema": "rna-bench-labels/1",
+  "help": "Copy to benchmark/fixtures/labels.json (git-ignored) and edit. Keys are user message item ids from user-messages.jsonl. 'labels' replaces the heuristic labels; 'add'/'remove' amend them; 'topic' groups corrections about the same complaint (repeat-correction rate uses topics when present). Allowed labels: correction, preference, approval, decision, pending_request, progress_query, message_complaint, question.",
+  "labels": {
+    "u2": { "labels": ["correction"], "topic": "scene-monotony" },
+    "u5": { "topic": "scene-monotony" },
+    "u4": { "remove": ["message_complaint"], "note": "a durable preference, not a complaint about wording" }
+  }
+}

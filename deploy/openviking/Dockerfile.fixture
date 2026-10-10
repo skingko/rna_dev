@@ -1,0 +1,3 @@
+FROM ghcr.io/volcengine/openviking:v0.4.21.1@sha256:13a78525aa255f0cdb026bfdc1ab8c3a9b2baa49148aa10df061e6c2b689c15f
+COPY model_fixture.py /fixture/model_fixture.py
+ENTRYPOINT ["python", "/fixture/model_fixture.py"]

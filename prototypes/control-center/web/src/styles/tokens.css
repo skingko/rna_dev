@@ -1,0 +1,224 @@
+/*
+ * Rna design tokens.
+ *
+ * Structure (after Harness' static -> alias layering): raw palette values live
+ * only here; every component reads semantic aliases (--bg-*, --text-*, --line-*,
+ * --accent*, --state-*). Dark mode swaps the aliases, never the components.
+ *
+ * Grid: 8pt with a 4pt half-step. Text: four levels (primary / secondary /
+ * tertiary / caption). One accent (indigo), neutral bluish surfaces.
+ */
+:root {
+  color-scheme: light;
+
+  /* ---- surfaces (bluish neutral) ---- */
+  --bg-base: #ffffff;            /* main work area */
+  --bg-sidebar: #f7f8fa;         /* navigation rail */
+  --bg-subtle: #f4f6f9;          /* hover rows, user bubble */
+  --bg-muted: #eef1f5;           /* pressed, selected rows */
+  --bg-inset: #f6f7f9;           /* code, terminal, diff bodies */
+  --bg-elevated: #ffffff;        /* menus, popovers, composer */
+  --bg-overlay: rgb(18 22 32 / 0.28);
+  --bg-hover: rgb(38 49 72 / 0.05);
+  --bg-active: rgb(38 49 72 / 0.09);
+
+  /* ---- text: 4 levels ---- */
+  --text-primary: #1b2130;
+  --text-secondary: #4b5366;
+  --text-tertiary: #7d8698;
+  --text-caption: #a4abb8;
+  --text-inverted: #ffffff;
+
+  /* ---- lines ---- */
+  --line-faint: rgb(28 38 64 / 0.06);
+  --line: rgb(28 38 64 / 0.09);
+  --line-strong: rgb(28 38 64 / 0.14);
+  --line-focus: rgb(79 99 216 / 0.55);
+
+  /* ---- single accent: indigo ---- */
+  --accent: #4f63d8;
+  --accent-hover: #4356c8;
+  --accent-soft: rgb(79 99 216 / 0.09);
+  --accent-softer: rgb(79 99 216 / 0.05);
+  --accent-text: #3f51bf;
+  --accent-contrast: #ffffff;
+
+  /* ---- states (used sparingly, never as decoration) ---- */
+  --state-success: #1f9d63;
+  --state-success-soft: rgb(31 157 99 / 0.1);
+  --state-warning: #b7791f;
+  --state-warning-soft: rgb(183 121 31 / 0.11);
+  --state-warning-text: #b45309;   /* AA on white (5.0:1) for warning text such as 完全访问 */
+  --state-danger: #d0453a;
+  --state-danger-soft: rgb(208 69 58 / 0.09);
+  --state-idle: #b5bcc8;
+
+  --diff-add-bg: rgb(31 157 99 / 0.08);
+  --diff-add-fg: #17784b;
+  --diff-del-bg: rgb(208 69 58 / 0.075);
+  --diff-del-fg: #b23a30;
+
+  /* brand mark keeps the legacy deep navy */
+  --brand-mark: #29344c;
+  --brand-mark-fg: #ffffff;
+
+  /* ---- elevation ---- */
+  --shadow-xs: 0 1px 2px rgb(22 30 52 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(22 30 52 / 0.04), 0 2px 8px rgb(22 30 52 / 0.05);
+  --shadow-md: 0 0 0 0.5px rgb(22 30 52 / 0.08), 0 4px 16px rgb(22 30 52 / 0.08), 0 1px 3px rgb(22 30 52 / 0.05);
+  --shadow-lg: 0 0 0 0.5px rgb(22 30 52 / 0.08), 0 12px 40px rgb(22 30 52 / 0.12), 0 2px 6px rgb(22 30 52 / 0.05);
+  --shadow-composer: 0 0 0 0.5px rgb(22 30 52 / 0.1), 0 6px 24px rgb(22 30 52 / 0.06), 0 1px 2px rgb(22 30 52 / 0.04);
+  --shadow-composer-focus: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 8px 28px rgb(22 30 52 / 0.07);
+
+  /* ---- composer controls ---- */
+  --composer-radius: 22px;
+  --send-bg: var(--accent);
+  --send-fg: var(--accent-contrast);
+  --send-radius: 999px;
+  --send-disabled-bg: var(--bg-muted);
+  --send-disabled-fg: var(--text-caption);
+
+  /* ---- radii ---- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 22px;
+  --radius-full: 999px;
+
+  /* ---- spacing (8pt, 4pt half steps) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- typography ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-brand: Georgia, "Times New Roman", serif;
+  --text-body: 15px;          /* reading text (answers, user messages) */
+  --leading-body: 1.7;
+  --text-ui: 13px;            /* chrome, rows, labels */
+  --leading-ui: 20px;
+  --text-small: 12px;
+  --text-micro: 11px;
+  --text-code: 12.5px;
+  --leading-code: 1.65;
+
+  /* ---- motion ---- */
+  --dur-instant: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- layout ---- */
+  --sidebar-width: 288px;
+  --topbar-height: 52px;
+  --content-width: 760px;
+  --dock-width: 440px;
+}
+
+/*
+ * Dark: neutral graphite sampled from the reference (no blue cast).
+ * main #161616 · sidebar #363636 · raised input/menu #262626 with a 1px
+ * #3c3c3c edge · table hairlines #2e2e2e · selected row #4b4b4b · text
+ * #cecece · links #75b6ff · full-access orange #ff7f2a · white send button.
+ * Secondary/tertiary text were lifted just enough to pass WCAG AA (4.5:1) on
+ * every surface; see the sidebar override below for its lighter ground.
+ */
+.dark {
+  color-scheme: dark;
+
+  --bg-base: #161616;
+  --bg-sidebar: #363636;
+  --bg-subtle: #1f1f1f;
+  --bg-muted: #2a2a2a;
+  --bg-inset: #1c1c1c;
+  --bg-elevated: #262626;
+  --bg-overlay: rgb(0 0 0 / 0.55);
+  --bg-hover: rgb(255 255 255 / 0.06);
+  --bg-active: rgb(255 255 255 / 0.1);
+
+  --text-primary: #cecece;
+  --text-secondary: #ababab;
+  --text-tertiary: #969696;
+  --text-caption: #808080;
+  --text-inverted: #161616;
+
+  --line-faint: rgb(255 255 255 / 0.07);
+  --line: rgb(255 255 255 / 0.1);
+  --line-strong: rgb(255 255 255 / 0.16);
+  --line-focus: rgb(117 182 255 / 0.6);
+
+  --accent: #75b6ff;
+  --accent-hover: #8cc3ff;
+  --accent-soft: rgb(117 182 255 / 0.14);
+  --accent-softer: rgb(117 182 255 / 0.08);
+  --accent-text: #75b6ff;
+  --accent-contrast: #0f1a27;
+
+  --state-success: #5ccf95;
+  --state-success-soft: rgb(92 207 149 / 0.13);
+  --state-warning: #ff7f2a;
+  --state-warning-soft: rgb(255 127 42 / 0.13);
+  --state-warning-text: #ff7f2a;
+  --state-danger: #ff7b72;
+  --state-danger-soft: rgb(255 123 114 / 0.12);
+  --state-idle: #5c5c5c;
+
+  --diff-add-bg: rgb(92 207 149 / 0.1);
+  --diff-add-fg: #74d8a6;
+  --diff-del-bg: rgb(255 123 114 / 0.1);
+  --diff-del-fg: #ff958d;
+
+  --brand-mark: #e6e6e6;
+  --brand-mark-fg: #161616;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 0 0 1px rgb(255 255 255 / 0.1), 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.1), 0 16px 48px rgb(0 0 0 / 0.55);
+  --shadow-composer: 0 0 0 1px rgb(255 255 255 / 0.1);
+  --shadow-composer-focus: 0 0 0 1px rgb(255 255 255 / 0.18);
+
+  --composer-radius: 18px;
+  --send-bg: #ffffff;
+  --send-fg: #161616;
+  --send-radius: 7px;
+  --send-disabled-bg: #3a3a3a;
+  --send-disabled-fg: #8a8a8a;
+}
+
+/* The sidebar ground is lighter (#363636), so its quieter text levels are
+   lifted to keep 4.5:1 there too. */
+.dark .surface-sidebar {
+  --text-secondary: #bdbdbd;
+  --text-tertiary: #acacac;
+  --text-caption: #a0a0a0;
+  --bg-hover: rgb(255 255 255 / 0.07);
+  --bg-active: rgb(255 255 255 / 0.1);   /* #4a4a4a on #363636 (ref #4b4b4b) */
+  --bg-elevated: #2f2f2f;
+}
+
+/* Terminal palette (ANSI), tuned for the inset surface in each theme. */
+:root {
+  --ansi-black: #3b4252; --ansi-red: #c2413a; --ansi-green: #2f8a5b; --ansi-yellow: #a4700f;
+  --ansi-blue: #3f63c9; --ansi-magenta: #9a4dbb; --ansi-cyan: #1d8595; --ansi-white: #6b7280;
+  --ansi-bright-black: #8a93a3; --ansi-bright-red: #d9544d; --ansi-bright-green: #3aa36d; --ansi-bright-yellow: #b98313;
+  --ansi-bright-blue: #5677db; --ansi-bright-magenta: #ad63cc; --ansi-bright-cyan: #2a9aab; --ansi-bright-white: #1b2130;
+}
+.dark {
+  --ansi-black: #8a8a8a; --ansi-red: #f07a70; --ansi-green: #6dd39f; --ansi-yellow: #e8bf6a;
+  --ansi-blue: #8ea8ff; --ansi-magenta: #d197f0; --ansi-cyan: #6fd0dd; --ansi-white: #c8ceda;
+  --ansi-bright-black: #8f97a6; --ansi-bright-red: #ff938a; --ansi-bright-green: #88e3b4; --ansi-bright-yellow: #f3d08a;
+  --ansi-bright-blue: #a9bcff; --ansi-bright-magenta: #e0b0f7; --ansi-bright-cyan: #8fe0ea; --ansi-bright-white: #f2f4f8;
+}

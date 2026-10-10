@@ -1,0 +1,23 @@
+{
+  "name": "rna-agent",
+  "version": "0.73.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "Rna Agent 本地控制平面与独立 Rna SDK",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "cli": "node cli.mjs"
+  },
+  "optionalDependencies": {
+    "node-pty": "1.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skingko/rna_dev.git"
+  }
+}

@@ -1,0 +1,98 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import http from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createServer } from '../server.mjs';
+import { ApplicationMaintenanceService, registerMaintenanceEntry } from '../application-maintenance.mjs';
+import { initialMaintenance, persistMaintenance, readMaintenance, changeMaintenance, maintenancePaths } from '../application-maintenance-state.mjs';
+import { atomicWrite } from '../durable-files.mjs';
+const fixture = async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'rna-maintenance-http-')), stateFile = join(dir, 'state.json');
+  const app = createServer({ stateFile, ticks: false, runtime: false, initiative: false });
+  await app.initializer.close();
+  await new Promise(done => app.server.listen(0, '127.0.0.1', done));
+  t.after(async () => { await app.close(); await rm(dir, { recursive: true, force: true }); });
+  const url = `http://127.0.0.1:${app.server.address().port}`;
+  const post = (path, body) => fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return { app, dir, stateFile, url, post };
+};
+const held = (stateFile, kind = 'backup') => persistMaintenance(stateFile, initialMaintenance(kind, {}, randomUUID(), {}));
+test('maintenance admission is visible without changing project state revision and preserves the draft request', async t => {
+  const { app, stateFile, post, url } = await fixture(t), revision = app.store.state.revision;
+  const row = held(stateFile); app.maintenanceGate.refresh();
+  const status = await (await fetch(`${url}/api/state`)).json();
+  assert.equal(status.revision, revision); assert.equal(status.maintenance.held, true); assert.equal(status.maintenance.operationId, row.id);
+  const response = await post('/api/sessions', { title: 'Must remain a draft' });
+  assert.equal(response.status, 503); assert.equal((await response.json()).code, 'maintenance_held'); assert.equal(app.store.state.revision, revision);
+  assert.equal((await (await fetch(`${url}/api/health`)).json()).workload.activeWork, false);
+  await changeMaintenance(stateFile, row.id, value => ({ ...value, held: false, phase: 'cancelled' })); app.maintenanceGate.refresh();
+  assert.equal((await post('/api/sessions', { title: 'Now accepted' })).status, 201);
+});
+test('SSE publishes a held transition even when the project revision is unchanged', async t => {
+  const { app, stateFile, url } = await fixture(t), controller = new AbortController();
+  const response = await fetch(`${url}/api/stream`, { signal: controller.signal });
+  const reader = response.body.getReader(), first = new TextDecoder().decode((await reader.read()).value);
+  assert.match(first, /"held":false/); const revision = app.store.state.revision;
+  held(stateFile); app.maintenanceGate.refresh();
+  const next = new TextDecoder().decode((await reader.read()).value); controller.abort();
+  assert.match(next, /"held":true/); assert.match(next, new RegExp(`"revision":${revision}`));
+});
+test('prepare is idempotent across a lost HTTP reply and incompatible request ids cannot be reused', async t => {
+  const { app, stateFile, dir } = await fixture(t); let spawned = 0;
+  const service = new ApplicationMaintenanceService(app.store, { gate: app.maintenanceGate, health: app.health, launch: async () => { spawned++; } });
+  const request = { source: dir, requestId: randomUUID() }, first = await service.submit('prepare', request), second = await service.submit('prepare', request);
+  assert.equal(first.operation.id, second.operation.id); assert.equal(spawned, 1); assert.equal(app.maintenanceGate.held, false);
+  await assert.rejects(service.submit('backup', { requestId: request.requestId }), { code: 'maintenance_request_conflict' });
+  assert.equal(readMaintenance(stateFile).kind, 'prepare');
+});
+test('managed maintenance rejects unregistered candidates, enforces stop-boundary cancellation and exposes accurate history', async t => {
+  const { app, stateFile } = await fixture(t), id = randomUUID();
+  atomicWrite(`${maintenancePaths(stateFile).directory}/config.json`, JSON.stringify({ stateFile, command: process.execPath, cwd: process.cwd(), port: 4317 }));
+  const health = () => ({ ...app.health(), process: { ...app.health().process, supervisorRunId: 'isolated-fixture' } });
+  const service = new ApplicationMaintenanceService(app.store, { gate: app.maintenanceGate, health, launch: async () => {} });
+  await assert.rejects(service.submit('apply', { candidateId: id, requestId: randomUUID() }), { code: 'maintenance_candidate_invalid' });
+  await registerMaintenanceEntry(stateFile, 'candidates', { id, hostVersion: '0.15.0', sdkVersion: '0.8.0', digest: 'a'.repeat(64), baselineOnly: false });
+  assert.equal(service.status().candidates[0].canRollback, false);
+  await assert.rejects(service.submit('rollback', { candidateId: id, requestId: randomUUID() }), { code: 'maintenance_rollback_unavailable' });
+  const request = await service.submit('apply', { candidateId: id, requestId: randomUUID() });
+  assert.equal(request.operation.candidateId, id); assert.equal(app.maintenanceGate.held, true);
+  await service.submit('cancel', { operationId: request.operation.id, requestId: randomUUID() }); assert.equal(readMaintenance(stateFile).cancelRequested, true);
+  await changeMaintenance(stateFile, request.operation.id, value => ({ ...value, phase: 'stopping' }));
+  await assert.rejects(service.submit('cancel', { operationId: request.operation.id, requestId: randomUUID() }), { code: 'maintenance_cannot_cancel' });
+});
+test('corrupt maintenance journal fails closed and never admits project changes', async t => {
+  const { app, stateFile, post } = await fixture(t);
+  atomicWrite(maintenancePaths(stateFile).journal, '{'); app.maintenanceGate.refresh();
+  assert.equal(app.maintenanceGate.held, true); assert.equal((await post('/api/sessions', {})).status, 503);
+});
+test('read-only application status is served by the actual host', async t => {
+  const { url } = await fixture(t);
+  const result = await (await fetch(`${url}/api/maintenance`)).json();
+  assert.equal(result.current.hostVersion, JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version); assert.equal(result.capabilities.backup, false); assert.equal(result.held, false);
+});
+test('an actual SDK turn finishes under the hold while a new user request stays unadmitted', { timeout: 15000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'rna-maintenance-turn-')), workspace = join(dir, 'project'); await mkdir(workspace);
+  let reply, requests = 0;
+  const provider = http.createServer(async (req, res) => { for await (const _ of req) {} requests++; reply = res; });
+  await new Promise(done => provider.listen(0, '127.0.0.1', done));
+  const stateFile = join(dir, 'state.json'), app = createServer({ stateFile, ticks: false }); await app.initializer.close();
+  t.after(async () => { await app.close(); provider.closeAllConnections(); await new Promise(done => provider.close(done)); await rm(dir, { recursive: true, force: true }); });
+  const model = app.store.configurationService.provider(null, { name: 'Isolated protocol fixture', protocol: 'openai', baseUrl: `http://127.0.0.1:${provider.address().port}/v1`, apiKey: 'fixture-only', models: [{ id: 'fixture-model', contextWindow: 32000, maxOutputTokens: 500, reasoning: ['off'] }] });
+  app.store.configurationService.update({ defaultModel: { providerId: model.id, modelId: 'fixture-model', reasoning: 'off' }, memory: { autoRecall: false, autoStore: false } });
+  const { session } = app.store.createProject({ name: 'Drain acceptance fixture', workspace, initiative: { enabled: false } });
+  await new Promise(done => app.server.listen(0, '127.0.0.1', done));
+  app.store.message(session.id, { text: 'Complete the isolated protocol fixture.', requestId: 'admitted-before-maintenance' });
+  const until = async check => { for (let i = 0; i < 200; i++) { if (check()) return; await delay(25); } throw Error('fixture did not settle'); };
+  await until(() => reply); held(stateFile); app.maintenanceGate.refresh();
+  assert.equal(app.health().workload.activeWork, true); const before = app.store.state.sessions.find(row => row.id === session.id).submissions.length;
+  const rejected = await fetch(`http://127.0.0.1:${app.server.address().port}/api/sessions/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'Keep this draft.', requestId: 'unadmitted-draft' }) });
+  assert.equal(rejected.status, 503); assert.equal(app.store.state.sessions.find(row => row.id === session.id).submissions.length, before);
+  reply.writeHead(200, { 'content-type': 'text/event-stream' }); reply.end('data: ' + JSON.stringify({ choices: [{ delta: { content: 'The accepted request completed.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }) + '\n\ndata: [DONE]\n\n');
+  await until(() => app.store.state.sessions.find(row => row.id === session.id).turns[0]?.status === 'completed' && !app.executor.running.size);
+  assert.equal(requests, 1); assert.equal(app.health().workload.activeWork, false); assert.equal(app.maintenanceGate.held, true);
+});

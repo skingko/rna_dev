@@ -1,0 +1,4 @@
+node_modules/
+dist/
+*.tsbuildinfo
+qa-screens/*.json

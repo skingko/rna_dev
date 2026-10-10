@@ -1,0 +1,10 @@
+import { createProjectSchedule, projectScheduleDue, projectScheduleView, updateProjectSchedule, type ProjectScheduleRule, type ProjectBootstrap, type InitiativeCoordinator } from '@rna-agent/sdk';
+const rule: ProjectScheduleRule = { kind: 'weekly', time: '09:00', timeZone: 'Asia/Shanghai', days: [1, 5] };
+const schedule = createProjectSchedule({ id: 'schedule-1', title: 'Weekly research', task: 'Read evidence and deliver a report.', destinationSessionId: 'session-1', rule });
+updateProjectSchedule(schedule, { enabled: false });
+projectScheduleView(schedule).nextRunAt satisfies string | null;
+const occurrence = projectScheduleDue(schedule);
+declare const coordinator: InitiativeCoordinator;
+if (occurrence) await coordinator.enqueueHostAction({ id: 'host-work-1', action: 'work', content: schedule.task, reason: 'Registered work is due', source: { id: occurrence.key, type: 'scheduled_occurrence', summary: 'Weekly report', at: Date.parse(occurrence.scheduledAt) }, hostSchedule: { key: occurrence.key, scheduleId: schedule.id, scheduleRevision: schedule.revision, destinationSessionId: schedule.destinationSessionId } });
+const initial: ProjectBootstrap['initialSchedules'] = [{ title: schedule.title, task: schedule.task, rule, requestEvidence: 'Weekly research report' }];
+void initial;

@@ -1,0 +1,187 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./markdown.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tailwind utilities resolve to the semantic aliases so dark mode is free. */
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-sidebar: var(--bg-sidebar);
+  --color-subtle: var(--bg-subtle);
+  --color-muted: var(--bg-muted);
+  --color-inset: var(--bg-inset);
+  --color-elevated: var(--bg-elevated);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-gutter: var(--workspace-gutter);
+
+  --color-fg: var(--text-primary);
+  --color-fg-2: var(--text-secondary);
+  --color-fg-3: var(--text-tertiary);
+  --color-fg-4: var(--text-caption);
+  --color-fg-inverted: var(--text-inverted);
+
+  --color-line-faint: var(--line-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-softer: var(--accent-softer);
+  --color-accent-text: var(--accent-text);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --color-success: var(--state-success);
+  --color-success-soft: var(--state-success-soft);
+  --color-warning: var(--state-warning);
+  --color-warning-soft: var(--state-warning-soft);
+  --color-warning-text: var(--state-warning-text);
+  --color-danger: var(--state-danger);
+  --color-danger-soft: var(--state-danger-soft);
+  --color-idle: var(--state-idle);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+}
+
+/* Workspace cards (design 1.4): panel groups sit as cards on a slightly different ground, apart from each other and
+   from the conversation. */
+:root {
+  --workspace-gutter: #f1f3f6;
+  --workspace-card-radius: 10px;
+  --workspace-card: 0 0 0 1px rgb(28 38 64 / 0.09), 0 1px 2px rgb(22 30 52 / 0.04), 0 4px 14px rgb(22 30 52 / 0.05);
+}
+.dark {
+  --workspace-gutter: #0c0c0c;
+  --workspace-card: 0 0 0 1px rgb(255 255 255 / 0.085), 0 2px 10px rgb(0 0 0 / 0.4);
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  html {
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--leading-ui);
+    color: var(--text-primary);
+    background: var(--bg-base);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-synthesis: none;
+    /* CJK/Latin spacing and punctuation trimming where supported. */
+    text-autospace: normal;
+    text-spacing-trim: normal;
+  }
+  body { margin: 0; overflow: hidden; }
+  ::selection { background: var(--accent-soft); }
+  button { cursor: pointer; font: inherit; color: inherit; }
+  button:disabled { cursor: default; }
+  :focus-visible { outline: 2px solid var(--line-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+  kbd { font-family: var(--font-sans); }
+  code, pre, kbd, samp { font-feature-settings: "calt" 0; }
+
+  /* Thin, quiet scrollbars that appear on the surface they scroll. */
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--text-caption); }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+
+@layer components {
+  /* Shared single-line flow row geometry (Harness DisclosureRow): 24px line,
+     16px leading box, 13px secondary text. */
+  .flow-row { display: flex; align-items: center; min-width: 0; height: 28px; gap: 8px; font-size: var(--text-ui); line-height: 20px; }
+  .flow-dot { flex: none; width: 2px; height: 2px; border-radius: 1px; background: var(--text-caption); }
+
+  /* Text shimmer: gradient sweep clipped to glyphs; compositor-light since it
+     only moves background-position on a single short line. */
+  .text-shimmer {
+    background-image: linear-gradient(90deg, currentColor 0%, currentColor 40%, color-mix(in oklab, currentColor 35%, transparent) 50%, currentColor 60%, currentColor 100%);
+    background-size: 250% 100%;
+    background-position: 100% 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: rna-shimmer 1.8s var(--ease-in-out) infinite;
+  }
+  @keyframes rna-shimmer { 0% { background-position: 100% 0; } 70%, 100% { background-position: 0% 0; } }
+
+  /* Row sweep for a streaming reasoning preview (transform-only). */
+  .row-sweep { position: relative; overflow: hidden; }
+  .row-sweep::after {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 240px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg-base) 70%, transparent) 55%, transparent);
+    transform: translateX(-260px); will-change: transform;
+    animation: rna-sweep 2.6s var(--ease-out) infinite;
+  }
+  @keyframes rna-sweep { 0% { transform: translateX(-260px); } 85%, 100% { transform: translateX(1100px); } }
+
+  .pulse-dot { animation: rna-pulse 1.6s var(--ease-in-out) infinite; }
+  @keyframes rna-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
+
+  .dot-ring { animation: rna-ring 1.8s var(--ease-out) infinite; }
+  @keyframes rna-ring { 0% { opacity: .55; transform: scale(1); } 80%, 100% { opacity: 0; transform: scale(2.6); } }
+
+  .spin { animation: rna-spin .9s linear infinite; }
+  @keyframes rna-spin { to { transform: rotate(360deg); } }
+
+  /* Fade at the bottom edge of the scrollport so content slides under the composer. */
+  .timeline-mask { mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent); }
+
+  .scroll-quiet { scrollbar-gutter: stable; }
+
+  /* Radix overlay motion: scale from the trigger, fade — transform/opacity only. */
+  .menu-content { transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, center)); }
+  .menu-content[data-state="open"] { animation: rna-pop-in 170ms var(--ease-out); }
+  .menu-content[data-state="closed"] { animation: rna-pop-out 110ms var(--ease-standard) forwards; }
+  .tooltip-content { transform-origin: var(--radix-tooltip-content-transform-origin); animation: rna-pop-in 140ms var(--ease-out); }
+  @keyframes rna-pop-in { from { opacity: 0; transform: scale(0.96) translateY(2px); } to { opacity: 1; transform: none; } }
+  @keyframes rna-pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.97); } }
+
+  .skeleton { position: relative; overflow: hidden; }
+  .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg-base) 55%, transparent), transparent); animation: rna-skeleton 1.4s var(--ease-in-out) infinite; }
+  @keyframes rna-skeleton { to { transform: translateX(100%); } }
+
+  /* Workspace (design 1.4): cells and group frames glide to their new rectangles (left/top/width/height, never a
+     transform on a shared ancestor); not while a divider is dragged or the window resizes. Frames would swallow
+     pointer events mid-drag. */
+  .workspace-cell { transition: left 180ms var(--ease-out), top 180ms var(--ease-out), width 180ms var(--ease-out), height 180ms var(--ease-out); }
+  .layout-resizing .workspace-cell, .layout-instant .workspace-cell { transition: none; }
+  .layout-resizing iframe, .layout-resizing webview { pointer-events: none; }
+  .workspace-card { border-radius: var(--workspace-card-radius); box-shadow: var(--workspace-card); }
+  .workspace-card-body { border-radius: 0 0 var(--workspace-card-radius) var(--workspace-card-radius); }
+  /* A divider lives in the gap between cards: a quiet bar shows on hover (after a beat, so passing over stays calm),
+     at once while dragged or focused. */
+  .workspace-divider > span { opacity: 0; transition: opacity 140ms var(--ease-out), background-color 140ms var(--ease-out); }
+  .workspace-divider:hover > span { opacity: 1; transition-delay: 120ms; }
+  .workspace-divider:focus-visible > span { opacity: 1; }
+  .workspace-divider-line { background: var(--accent); }
+  /* 辅助对话 timeline: a step smaller reading size in the narrow panel. */
+  .timeline-compact { --text-body: 14px; }
+  .xterm { height: 100%; }
+  .xterm .xterm-viewport { background-color: transparent !important; scrollbar-width: thin; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text-shimmer { animation: none; background-image: none; -webkit-text-fill-color: currentColor; }
+  .row-sweep::after, .pulse-dot, .spin, .dot-ring { animation: none; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+}

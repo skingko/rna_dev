@@ -1,0 +1,18 @@
+{
+  "name": "rna-agent-desktop",
+  "private": true,
+  "version": "0.73.0",
+  "license": "Apache-2.0",
+  "main": "main.cjs",
+  "description": "Rna Agent 桌面应用，含独立 SDK、受管本机服务和命令行",
+  "productName": "Rna Agent",
+  "scripts": {
+    "start": "electron .",
+    "package": "node build.mjs",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.4.5"
+  }
+}

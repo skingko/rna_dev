@@ -1,0 +1,61 @@
+name: rna-openviking-semantic
+
+# Real trained weights, verified before OpenViking starts. Candidate staging
+# publishes no host port; existing memory and its old 64D volume stay untouched.
+services:
+  embedding:
+    image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
+    container_name: rna-openviking-embedding
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "24h"
+    volumes:
+      - models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  openviking:
+    image: ghcr.io/volcengine/openviking:v0.4.21.1@sha256:13a78525aa255f0cdb026bfdc1ab8c3a9b2baa49148aa10df061e6c2b689c15f
+    container_name: rna-openviking-semantic
+    volumes:
+      - data:/app/.openviking
+    environment:
+      OPENVIKING_WITH_BOT: "0"
+      OPENVIKING_SERVER_PORT: "1933"
+    depends_on:
+      embedding:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "openviking-entrypoint", "--healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  default:
+    name: rna-openviking-semantic
+
+volumes:
+  data:
+    name: rna-openviking-semantic-bge-m3-1024-790764642607
+    labels:
+      rna.embedding.model: bge-m3
+      rna.embedding.dimension: "1024"
+      rna.embedding.manifest: sha256:7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab
+  models:
+    name: rna-openviking-models-bge-m3-790764642607

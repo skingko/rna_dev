@@ -1,0 +1,28 @@
+{
+  "name": "@rna-agent/sdk",
+  "version": "0.59.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Rna Agent's independent provider, session, capability, project and initiative runtime",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs"
+    },
+    "./providers": {
+      "types": "./src/providers.d.ts",
+      "import": "./src/providers.mjs"
+    }
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skingko/rna_dev.git"
+  }
+}

@@ -1,0 +1,7 @@
+# macOS native Ollama uses Metal; the official model and index identity stay
+# identical. Explicit profile prevents downloading the Docker GPU libraries.
+services:
+  embedding:
+    profiles: [container-embedding]
+  openviking:
+    depends_on: !reset {}

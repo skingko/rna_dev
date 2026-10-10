@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+RNA_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -n "${RNA_AGENT_NODE:-}" ]; then
+  RNA_NODE=$RNA_AGENT_NODE
+elif [ -x "$RNA_ROOT/.runtime/node/node_modules/node/bin/node" ]; then
+  RNA_NODE="$RNA_ROOT/.runtime/node/node_modules/node/bin/node"
+else
+  RNA_NODE=$(command -v node || true)
+fi
+if [ -z "$RNA_NODE" ] || ! "$RNA_NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=19)?0:1)' 2>/dev/null; then
+  echo 'Rna Agent requires Node >=22.19.0. Set RNA_AGENT_NODE to a compatible Node executable.' >&2
+  exit 2
+fi
+case "${1:-help}" in
+  start) shift; exec "$RNA_NODE" "$RNA_ROOT/server.mjs" "$@" ;;
+  recovery) case "${2:-}" in status|resume|reconcile|restore) exec "$RNA_NODE" "$RNA_ROOT/application-recovery-cli.mjs" "$@" ;; *) exec "$RNA_NODE" "$RNA_ROOT/cli.mjs" "$@" ;; esac ;;
+  service|endurance) exec "$RNA_NODE" "$RNA_ROOT/service-cli.mjs" "$@" ;;
+  bench) shift; exec "$RNA_NODE" "$RNA_ROOT/benchmark/cli.mjs" "$@" ;;
+  test) shift; cd "$RNA_ROOT"; exec "$RNA_NODE" --test "$@" ;;
+  -h|--help) exec "$RNA_NODE" "$RNA_ROOT/cli.mjs" help ;;
+  *) exec "$RNA_NODE" "$RNA_ROOT/cli.mjs" "$@" ;;
+esac

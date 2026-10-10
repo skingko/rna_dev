@@ -1,0 +1,12 @@
+import { createProjectEvaluationRevision, describeProjectEvaluationCase, evaluateProjectGenomes, projectEvaluationClockInstructions, validateProjectEvaluationClock, type ProjectEvaluationClock, type ProjectEvaluationRevisionInput, type ProjectGenome, type ModelConfig } from '@rna-agent/sdk';
+declare const baseline: ProjectGenome;
+declare const candidate: ProjectGenome;
+declare const model: ModelConfig;
+const clock: ProjectEvaluationClock = { now: '2025-06-01T01:00:00.000Z', timeZone: 'Asia/Shanghai' };
+validateProjectEvaluationClock(clock); projectEvaluationClockInstructions(clock);
+const input: ProjectEvaluationRevisionInput = { schemaVersion: 1, sourceSuiteHash: 'hash', reason: 'Explicit correction of the environmental task facts', suite: baseline.evaluationSuite };
+const revision = createProjectEvaluationRevision(baseline, input, candidate);
+const result = await evaluateProjectGenomes({ baseline, candidate, model, evaluationRevision: revision });
+describeProjectEvaluationCase(result.suite.cases[0], { answer: 'A result', toolResults: [] });
+const hash: string | undefined = result.evaluationRevision?.revisionHash;
+void hash;

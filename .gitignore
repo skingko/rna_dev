@@ -1,0 +1,27 @@
+.DS_Store
+node_modules/
+references/pi/
+references/headlong/
+references/OpenViking/
+references/deepseek-harness/
+prototypes/control-center/.state/
+prototypes/control-center/desktop/node_modules/
+prototypes/control-center/desktop/dist/
+__pycache__/
+references/mu/
+references/rrsi/
+deploy/openviking/.runtime/
+prototypes/control-center/qa/
+prototypes/control-center/.node/
+**/dist/
+*.dmg
+*.tsbuildinfo
+.claude/
+
+# i18n-wrap scratch output
+prototypes/control-center/web/.i18n-keys.txt
+
+# K4 benchmark: local fixtures may contain raw user content — never commit
+prototypes/control-center/benchmark/fixtures/
+references/zcode/
+references/ModularRSI/

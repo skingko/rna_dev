@@ -1,0 +1,95 @@
+/* Reading typography for assistant answers and expanded reasoning.
+   Body 15px / 1.7, tuned for mixed Chinese + Latin. */
+.md {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  letter-spacing: 0.005em;
+}
+.md > :first-child { margin-top: 0 !important; }
+.md > :last-child { margin-bottom: 0 !important; }
+.md p { margin: 0 0 0.85em; }
+.md h1, .md h2, .md h3, .md h4 {
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.45;
+  margin: 1.5em 0 0.6em;
+}
+.md h1 { font-size: 1.4em; }
+.md h2 { font-size: 1.2em; }
+.md h3 { font-size: 1.07em; }
+.md h4 { font-size: 1em; color: var(--text-secondary); }
+.md strong { font-weight: 600; color: var(--text-primary); }
+.md em { font-style: italic; }
+.md a { color: var(--accent-text); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; transition: text-decoration-color var(--dur-fast); }
+.md a:hover { text-decoration-color: currentColor; }
+.md ul, .md ol { margin: 0 0 0.85em; padding-left: 1.4em; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md ul ul { list-style: circle; }
+.md li { margin: 0.25em 0; padding-left: 0.15em; }
+.md li::marker { color: var(--text-caption); }
+.md ol > li::marker { font-variant-numeric: tabular-nums; }
+.md li > p { margin: 0.25em 0; }
+.md blockquote { margin: 0 0 0.9em; padding: 0.1em 0 0.1em 1em; border-left: 2px solid var(--line-strong); color: var(--text-secondary); }
+.md hr { border: 0; height: 1px; background: var(--line); margin: 1.6em 0; }
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+.md table { border-collapse: collapse; margin: 0.4em 0 1em; font-size: 0.92em; line-height: 1.55; display: block; overflow-x: auto; max-width: 100%; }
+.md th, .md td { padding: 7px 14px 7px 0; border-bottom: 1px solid var(--line-faint); text-align: left; vertical-align: top; }
+.md th { font-weight: 600; color: var(--text-secondary); border-bottom-color: var(--line); white-space: nowrap; }
+.md tr:last-child td { border-bottom: 0; }
+.md img { max-width: 100%; border-radius: var(--radius-md); }
+
+/* Compact variant: expanded reasoning, tool details. */
+.md-compact { font-size: 13.5px; line-height: 1.7; color: var(--text-secondary); }
+.md-compact strong { color: var(--text-secondary); }
+.md-compact h1, .md-compact h2, .md-compact h3 { font-size: 1em; margin: 1em 0 0.4em; color: var(--text-secondary); }
+.md-compact p { margin-bottom: 0.6em; }
+
+/* Code blocks (Shiki tokens carry --shiki-light / --shiki-dark). */
+.code-card { margin: 0.4em 0 1em; border-radius: var(--radius-lg); background: var(--bg-inset); border: 1px solid var(--line-faint); overflow: hidden; }
+.code-card-head { display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 8px 0 14px; font-size: 12px; color: var(--text-tertiary); border-bottom: 1px solid var(--line-faint); }
+.code-card pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: var(--text-code); line-height: var(--leading-code); tab-size: 2; color: var(--text-primary); }
+.shiki-token { color: var(--shiki-light); }
+.dark .shiki-token { color: var(--shiki-dark); }
+
+/* Document variant: workspace files opened in the file preview. Wider
+   measure, clearer heading rhythm and ruled tables for reports. */
+.md-doc { font-size: 14.5px; line-height: 1.75; }
+.md-doc h1 { font-size: 1.75em; margin: 0 0 0.7em; padding-bottom: 0.35em; border-bottom: 1px solid var(--line-faint); letter-spacing: 0; }
+.md-doc h2 { font-size: 1.32em; margin: 1.6em 0 0.6em; padding-bottom: 0.25em; border-bottom: 1px solid var(--line-faint); }
+.md-doc h3 { font-size: 1.12em; margin: 1.4em 0 0.5em; }
+.md-doc h4 { margin: 1.2em 0 0.4em; }
+.md-doc table { display: table; width: max-content; min-width: 60%; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-md); border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 0.93em; margin: 0.6em 0 1.2em; }
+.md-doc .md-table-wrap { overflow-x: auto; max-width: 100%; margin: 0.6em 0 1.2em; }
+.md-doc .md-table-wrap > table { margin: 0; }
+.md-doc th, .md-doc td { padding: 7px 12px; border-bottom: 1px solid var(--line-faint); border-right: 1px solid var(--line-faint); }
+.md-doc th:last-child, .md-doc td:last-child { border-right: 0; }
+.md-doc th { background: var(--bg-subtle); color: var(--text-primary); }
+.md-doc tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-subtle) 55%, transparent); }
+.md-doc td[align="right"], .md-doc th[align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
+.md-doc td[align="center"], .md-doc th[align="center"] { text-align: center; }
+.md-doc li.task-list-item { list-style: none; margin-left: -1.3em; }
+.md-doc li.task-list-item input[type="checkbox"] { margin: 0 0.5em 0 0; vertical-align: -1px; accent-color: var(--accent); pointer-events: none; }
+.md-doc ul.contains-task-list { padding-left: 1.3em; }
+.md-doc img { display: block; margin: 0.8em 0; box-shadow: 0 0 0 1px var(--line-faint); }
+.md-doc blockquote { background: var(--bg-subtle); border-left-color: var(--accent); border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: 0.6em 1em; }
+.md-doc blockquote > :last-child { margin-bottom: 0; }
+
+/* Code preview: line-numbered source with optional soft wrap. */
+.code-lines { font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.7; tab-size: 4; color: var(--text-primary); }
+.code-lines .ln { width: 3.6em; flex-shrink: 0; padding-right: 1.1em; text-align: right; color: var(--text-caption); user-select: none; font-variant-numeric: tabular-nums; }
+.code-lines .lc { white-space: pre; padding-right: 1.5em; }
+.code-lines.wrap .lc { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; flex: 1; }
+
+/* Image preview canvas: a quiet checkerboard shows transparency. */
+.preview-checker { background-color: var(--bg-inset); background-image: linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%), linear-gradient(45deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in srgb, var(--text-primary) 5%, transparent) 75%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }

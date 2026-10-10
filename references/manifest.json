@@ -1,0 +1,93 @@
+{
+  "capturedAt": "2026-09-23T18:04:11.857670+00:00",
+  "researchType": "Static code inspection; no upstream install or API benchmark",
+  "repositories": [
+    {
+      "name": "pi",
+      "url": "https://github.com/earendil-works/pi.git",
+      "commit": "42a3497d03ad17e308a2299fa824727894f2c0ec",
+      "commitTime": "2026-10-09T19:38:02+00:00",
+      "shallow": true,
+      "path": "references/pi",
+      "licenseSummary": "MIT"
+    },
+    {
+      "name": "headlong",
+      "url": "https://github.com/laude-institute/headlong.git",
+      "commit": "ca0b4017f7bda7b8566c59e75a9683f635534356",
+      "commitTime": "2026-09-23T16:27:12+08:00",
+      "shallow": true,
+      "path": "references/headlong",
+      "licenseSummary": "Apache-2.0"
+    },
+    {
+      "name": "OpenViking",
+      "url": "https://github.com/volcengine/OpenViking.git",
+      "commit": "de1c5c49541f8910877db31f1a4ceb617e8e9855",
+      "commitTime": "2026-09-23T22:56:07+08:00",
+      "shallow": true,
+      "path": "references/OpenViking",
+      "licenseSummary": "AGPL-3.0 core; see component LICENSE files"
+    },
+    {
+      "name": "deepseek-harness",
+      "url": "https://github.com/deepseek-ai/deepseek-harness.git",
+      "commit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+      "commitTime": "2026-10-09T17:31:32+08:00",
+      "shallow": true,
+      "path": "references/deepseek-harness",
+      "licenseSummary": "MIT"
+    },
+    {
+      "name": "mu",
+      "url": "https://github.com/qybaihe/mu.git",
+      "commit": "1272e53c0990d7653910fb47061741dead664442",
+      "shallow": true,
+      "path": "references/mu",
+      "licenseSummary": "MIT core; separate desktop Apache-2.0 (not copied)"
+    },
+    {
+      "name": "rrsi",
+      "url": "https://github.com/google-research/rrsi.git",
+      "commit": "be50316e1db05914068a973f322770ef08ed7ba1",
+      "commitTime": "2026-09-23T18:16:24-04:00",
+      "shallow": true,
+      "path": "references/rrsi",
+      "licenseSummary": "Apache-2.0 core; third_party components retain their own licenses; conceptual adaptation, no runtime dependency",
+      "capturedAt": "2026-09-27T16:11:09.393599+00:00"
+    },
+    {
+      "name": "zcode",
+      "url": "https://github.com/zai-org/ZCode.git",
+      "commit": "29628c9acdb81b703bbd4080c207a0e7ce5e276e",
+      "commitTime": "2026-09-24T14:49:06+08:00",
+      "shallow": true,
+      "path": "references/zcode",
+      "licenseSummary": "Apache-2.0; UI/design reference for the tabbed side panel, built-in browser and terminal; no code copied",
+      "capturedAt": "2026-09-28T18:30:55.467Z"
+    },
+    {
+      "name": "ModularRSI",
+      "url": "https://github.com/IQuestLab/ModularRSI.git",
+      "commit": "b5c72c36b0d08ff93f00ee202a8fbdebe849dfb9",
+      "shallow": true,
+      "path": "references/ModularRSI",
+      "licenseSummary": "CC BY-NC 4.0 (research contributions); Apache-2.0 (Harbor-derived code)",
+      "note": "Studied for evolution v3: independently evolvable modules, contrastive trajectory analysis, scoped changes, validation gates, variant archive."
+    }
+  ],
+  "papers": [
+    {
+      "title": "Aspire: Can Models Self-Evolve from Vague Goals?",
+      "arxiv": "2608.31111v1",
+      "url": "https://arxiv.org/pdf/2608.31111"
+    },
+    {
+      "title": "RRSI: Regularized Recursive Self-Improvement of Agent Harnesses",
+      "arxiv": "2609.24972v2",
+      "url": "https://arxiv.org/html/2609.24972v2",
+      "reviewedAt": "2026-09-28",
+      "scope": "proposal history, candidate edit budget, leakage critic, calibrated selection and structural pruning; not an Rna performance claim"
+    }
+  ]
+}
