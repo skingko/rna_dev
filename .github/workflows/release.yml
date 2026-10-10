@@ -2,6 +2,14 @@ name: Release
 
 # A tag v<version> builds the desktop app for macOS, Linux and Windows, starts each packaged build once, and publishes
 # them as a GitHub release. Run by hand, it builds and tests the same packages and keeps them as workflow artifacts.
+#
+# macOS apps are signed with a Developer ID and notarized when these repository secrets exist (Settings → Secrets and
+# variables → Actions); without them the macOS builds are left unsigned and everything else is unchanged:
+#   APPLE_CERTIFICATE           the Developer ID Application certificate with its private key, as a base64 .p12
+#   APPLE_CERTIFICATE_PASSWORD  the password that .p12 was exported with
+#   APPLE_ID                    the Apple ID that belongs to the developer account
+#   APPLE_APP_PASSWORD          an app-specific password for that Apple ID (appleid.apple.com)
+#   APPLE_TEAM_ID               the 10-character team identifier
 on:
   push:
     tags: ['v*']
@@ -18,7 +26,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +64,45 @@ jobs:
       - name: Package
         working-directory: prototypes/control-center/desktop
         run: npm run package -- --out dist/release --arch ${{ matrix.arch }}
+      - name: Is macOS signing configured?
+        id: signing
+        if: runner.os == 'macOS'
+        env:
+          CONFIGURED: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          echo "enabled=$CONFIGURED" >> "$GITHUB_OUTPUT"
+          if [ "$CONFIGURED" != "true" ]; then echo "::notice::No Apple signing secrets: the macOS build stays unsigned."; fi
+      - name: Sign and notarize the macOS app
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: prototypes/control-center/desktop
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # A keychain of its own, with a throwaway password, removed at the end of the job.
+          keychain="$RUNNER_TEMP/rna-signing.keychain-db"; keychain_password=$(uuidgen)
+          echo "KEYCHAIN_PATH=$keychain" >> "$GITHUB_ENV"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -oE '[0-9A-F]{40}' | head -1)
+          if [ -z "$identity" ]; then echo "::error::The certificate has no valid code-signing identity (is it a Developer ID Application certificate, with its private key?)"; exit 1; fi
+          xcrun notarytool store-credentials rna-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$keychain" > /dev/null
+          dmg=$(ls dist/release/Rna-Agent-*.dmg)
+          node sign-macos.mjs "$dmg" --identity "$identity" --notary-profile rna-notary --keychain "$keychain" --out dist/signed
+          # What was just checked and notarized replaces the unsigned app and image; the steps below handle them as before.
+          rm -f dist/release/Rna-Agent-*.dmg && cp dist/signed/Rna-Agent-*.dmg dist/release/
+          app="dist/release/Rna Agent-${{ matrix.folder }}-${{ matrix.arch }}/${{ matrix.app }}"
+          rm -rf "$app" && ditto "dist/signed/Rna Agent.app" "$app"
       - name: Start the packaged build once
         working-directory: prototypes/control-center/desktop
         run: |
@@ -68,6 +115,11 @@ jobs:
           mkdir -p ../upload
           cp Rna-Agent-* ../upload/
           cp build-report.json "../upload/build-report-${{ matrix.name }}.json"
+      - name: Remove the signing keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
+          rm -f "$RUNNER_TEMP/certificate.p12"
       - uses: actions/upload-artifact@v4
         with:
           name: rna-agent-${{ matrix.name }}

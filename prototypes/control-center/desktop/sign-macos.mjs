@@ -4,7 +4,7 @@
 // It runs on the machine that holds the certificate; the release workflow's unsigned build is its input.
 //
 //   node sign-macos.mjs <Rna Agent.app | .dmg> --identity <certificate hash or name> [--out <folder>]
-//                       [--notary-profile <notarytool keychain profile>]
+//                       [--notary-profile <notarytool keychain profile>] [--keychain <keychain file>]
 //
 // Nothing secret is read or printed: codesign and notarytool use the login keychain themselves.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -18,6 +18,7 @@ const argValue = name => { const index = process.argv.indexOf(name); return inde
 const input = process.argv[2] && !process.argv[2].startsWith('--') ? resolve(process.argv[2]) : null;
 const identity = argValue('--identity') ?? process.env.RNA_SIGN_IDENTITY, profile = argValue('--notary-profile') ?? process.env.RNA_NOTARY_PROFILE ?? null;
 const outDirectory = resolve(argValue('--out') ?? join(dirname(input ?? '.'), 'signed'));
+const keychain = argValue('--keychain'), keychainArgs = keychain ? ['--keychain', resolve(keychain)] : [];
 const entitlements = join(here, 'entitlements.mac.plist');
 if (process.platform !== 'darwin') throw new Error('signing runs on macOS');
 if (!input || !identity) throw new Error('usage: sign-macos.mjs <Rna Agent.app|.dmg> --identity <hash or name> [--out folder] [--notary-profile name]');
@@ -42,7 +43,7 @@ function inventory(app) {
   const depth = path => path.split('/').length;
   return { machO: machO.sort((a, b) => depth(b) - depth(a)), bundles: bundles.sort((a, b) => depth(b) - depth(a)) };
 }
-const sign = (path, extra = []) => run('/usr/bin/codesign', ['--force', '--timestamp', '--options', 'runtime', '--entitlements', entitlements, '--sign', identity, ...extra, path]);
+const sign = (path, extra = []) => run('/usr/bin/codesign', ['--force', '--timestamp', '--options', 'runtime', '--entitlements', entitlements, '--sign', identity, ...keychainArgs, ...extra, path]);
 
 function makeDisk(app, destination) {
   const staging = mkdtempSync(join(tmpdir(), 'rna-sign-disk-')), disk = join(staging, 'disk'); mkdirSync(disk);
@@ -58,11 +59,11 @@ function makeDisk(app, destination) {
 }
 function notarize(file) {
   // notarytool prints the submission id and the verdict; a rejection exits non-zero and its log says why.
-  const result = spawnSync('/usr/bin/xcrun', ['notarytool', 'submit', file, '--keychain-profile', profile, '--wait', '--output-format', 'json'], { encoding: 'utf8' });
+  const result = spawnSync('/usr/bin/xcrun', ['notarytool', 'submit', file, '--keychain-profile', profile, ...keychainArgs, '--wait', '--output-format', 'json'], { encoding: 'utf8' });
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`; process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
   let verdict = null; try { verdict = JSON.parse(result.stdout); } catch { /* not JSON: an error before submission */ }
   if (result.status !== 0 || verdict?.status !== 'Accepted') {
-    if (verdict?.id) spawnSync('/usr/bin/xcrun', ['notarytool', 'log', verdict.id, '--keychain-profile', profile], { stdio: 'inherit' });
+    if (verdict?.id) spawnSync('/usr/bin/xcrun', ['notarytool', 'log', verdict.id, '--keychain-profile', profile, ...keychainArgs], { stdio: 'inherit' });
     throw new Error(`notarization of ${basename(file)} was not accepted (${verdict?.status ?? 'no verdict'})`);
   }
 }
@@ -102,7 +103,7 @@ try {
     notarize(archive); run('/usr/bin/xcrun', ['stapler', 'staple', app]);
   }
   makeDisk(app, dmg);
-  run('/usr/bin/codesign', ['--force', '--timestamp', '--sign', identity, dmg]);
+  run('/usr/bin/codesign', ['--force', '--timestamp', '--sign', identity, ...keychainArgs, dmg]);
   if (profile) { notarize(dmg); run('/usr/bin/xcrun', ['stapler', 'staple', dmg]); }
   // Gatekeeper's own verdict on what a user would download.
   const assessment = spawnSync('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', '-vv', dmg], { encoding: 'utf8' });
