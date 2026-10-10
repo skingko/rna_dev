@@ -44,3 +44,24 @@ a few timing tests can fail under heavy load and pass when run alone.
 
 Open an issue with the version, your platform, what you did and what you expected. For anything that
 touches credentials or the local service's exposure, use [SECURITY.md](SECURITY.md) instead.
+
+## Signing and notarizing the macOS release
+
+The release workflow builds unsigned macOS apps (GitHub's runners do not hold a certificate). Signing is done on the
+machine that has the Developer ID certificate, from the workflow's own output:
+
+```bash
+gh release download v<version> --pattern 'Rna-Agent-*-macOS-*.dmg' --dir /tmp/rna-release
+
+# one run per architecture; --notary-profile is a profile made once with
+#   xcrun notarytool store-credentials <name>
+node prototypes/control-center/desktop/sign-macos.mjs /tmp/rna-release/Rna-Agent-<version>-macOS-arm64.dmg \
+  --identity "<Developer ID Application hash or name>" --notary-profile <name> --out /tmp/rna-signed/arm64
+
+gh release upload v<version> /tmp/rna-signed/*/Rna-Agent-*.dmg --clobber
+```
+
+The script signs every binary and bundle with the hardened runtime, takes the bundled runtime's file inventory again
+(signing changes the bytes it records), seals the app, builds the disk image, and with a profile notarizes and staples
+both the app and the image. Nothing secret is read: `codesign` and `notarytool` use the keychain themselves.
+After uploading, refresh `SHA256SUMS.txt` on the release.
