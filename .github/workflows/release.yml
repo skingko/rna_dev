@@ -98,7 +98,7 @@ jobs:
           if [ -z "$identity" ]; then echo "::error::The certificate has no valid code-signing identity (is it a Developer ID Application certificate, with its private key?)"; exit 1; fi
           xcrun notarytool store-credentials rna-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$keychain" > /dev/null
           dmg=$(ls dist/release/Rna-Agent-*.dmg)
-          node sign-macos.mjs "$dmg" --identity "$identity" --notary-profile rna-notary --keychain "$keychain" --out dist/signed
+          node sign-macos.mjs "$dmg" --identity "$identity" --notary-profile rna-notary --notarize-image --keychain "$keychain" --out dist/signed
           # What was just checked and notarized replaces the unsigned app and image; the steps below handle them as before.
           rm -f dist/release/Rna-Agent-*.dmg && cp dist/signed/Rna-Agent-*.dmg dist/release/
           app="dist/release/Rna Agent-${{ matrix.folder }}-${{ matrix.arch }}/${{ matrix.app }}"
