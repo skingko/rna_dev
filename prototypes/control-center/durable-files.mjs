@@ -2,9 +2,13 @@ import { mkdirSync, openSync, closeSync, fsyncSync, writeFileSync, renameSync, u
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export function syncDirectory(path) {
+/** Flush a directory's entries (a created, renamed or removed file) to disk. Windows cannot fsync a directory handle
+ * (EPERM); there a rename is already written through, so the call succeeds without doing more. `platform` is a test seam. */
+export function syncDirectory(path, platform = process.platform) {
   const fd = openSync(path, 'r');
-  try { fsyncSync(fd); } finally { closeSync(fd); }
+  try { fsyncSync(fd); }
+  catch (error) { if (!(platform === 'win32' && ['EPERM', 'EISDIR', 'EINVAL', 'EACCES'].includes(error.code))) throw error; }
+  finally { closeSync(fd); }
 }
 
 /** Never replace a state file with a partially written payload. A post-rename

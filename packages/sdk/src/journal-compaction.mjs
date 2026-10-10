@@ -107,7 +107,8 @@ export function compactJournal(file, { dryRun = false, segmentMs = STREAM_SEGMEN
   }
 }
 const fstatSafe = path => { try { return lstatSync(path); } catch { return null; } };
-function syncDirectory(path) { const fd = openSync(path, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
+// Windows cannot fsync a directory handle (EPERM); a rename there is already written through.
+function syncDirectory(path) { const fd = openSync(path, 'r'); try { fsyncSync(fd); } catch (error) { if (!(process.platform === 'win32' && ['EPERM', 'EISDIR', 'EINVAL', 'EACCES'].includes(error.code))) throw error; } finally { closeSync(fd); } }
 
 /** Backups left by earlier compactions of `file`. */
 export function compactionBackups(file) {
