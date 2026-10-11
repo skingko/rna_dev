@@ -5,10 +5,12 @@
 //
 //   node sign-macos.mjs <Rna Agent.app | .dmg> --identity <certificate hash or name> [--out <folder>]
 //                       [--notary-profile <notarytool keychain profile>] [--keychain <keychain file>]
-//                       [--notarize-image] [--notary-timeout <minutes, default 150>]
+//                       [--notarize-image] [--notary-timeout <minutes, default 150>] [--image-timeout <minutes, default 60>]
 //
 // The app is notarized and stapled; the disk image is signed. Notarizing the image as well (--notarize-image) is only
-// needed to have the .dmg file itself pass Gatekeeper's check: the app inside is accepted either way.
+// needed to have the .dmg file itself pass Gatekeeper's check: the app inside is accepted either way. The image is
+// therefore best effort: if Apple has not answered within --image-timeout, the image stays signed (its app is notarized and
+// stapled) and the run goes on, where the app's own notarization has to finish or the run fails.
 //
 // Nothing secret is read or printed: codesign and notarytool use the login keychain themselves.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -68,16 +70,16 @@ const sleepSeconds = seconds => run('/bin/sleep', [String(seconds)]);
  * middle of a long wait must not lose a submission that is still being processed, so the wait is ours, not notarytool's.
  * A submission is sometimes left "In Progress" for hours while a fresh one of the same file is answered in minutes, so
  * one that has had no verdict for 40 minutes gets a second copy beside it (three at most); the first verdict counts. */
-function notarize(file) {
+function notarize(file, limitMinutes = notaryMinutes) {
   const submit = () => {
     const submitted = notary('submit', file, '--output-format', 'json');
     let id = null; try { id = JSON.parse(submitted.stdout).id; } catch { /* no submission id */ }
     if (submitted.status !== 0 || !id) throw new Error(`could not submit ${basename(file)}: ${(submitted.stderr || submitted.stdout || '').trim().slice(0, 400)}`);
     console.log(`submitted ${basename(file)}: ${id}`); return id;
   };
-  const ids = [submit()], deadline = Date.now() + notaryMinutes * 60000; let nextCopy = Date.now() + 40 * 60000, failures = 0;
+  const ids = [submit()], deadline = Date.now() + limitMinutes * 60000; let nextCopy = Date.now() + 40 * 60000, failures = 0;
   for (;;) {
-    if (Date.now() > deadline) throw new Error(`notarization of ${basename(file)} is still in progress after ${notaryMinutes} minutes; check it with: xcrun notarytool info ${ids.at(-1)} --keychain-profile ${profile}`);
+    if (Date.now() > deadline) throw Object.assign(new Error(`notarization of ${basename(file)} is still in progress after ${limitMinutes} minutes; check it with: xcrun notarytool info ${ids.at(-1)} --keychain-profile ${profile}`), { timedOut: true });
     if (ids.length < 3 && Date.now() > nextCopy) { ids.push(submit()); nextCopy = Date.now() + 40 * 60000; }
     sleepSeconds(30);
     for (const id of ids) {
@@ -125,13 +127,17 @@ try {
   }
   makeDisk(app, dmg);
   run('/usr/bin/codesign', ['--force', '--timestamp', '--sign', identity, ...keychainArgs, dmg]);
-  if (profile && process.argv.includes('--notarize-image')) { notarize(dmg); run('/usr/bin/xcrun', ['stapler', 'staple', dmg]); }
+  let imageNotarized = false;
+  if (profile && process.argv.includes('--notarize-image')) {
+    try { notarize(dmg, Number(argValue('--image-timeout') ?? 60)); run('/usr/bin/xcrun', ['stapler', 'staple', dmg]); imageNotarized = true; }
+    catch (error) { if (!error.timedOut) throw error; console.warn(`::warning::${error.message}\nThe disk image is signed but not notarized; the app inside is notarized and stapled.`); }
+  }
   // Gatekeeper's own verdict on what a user would download.
   const assessment = spawnSync('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', '-vv', dmg], { encoding: 'utf8' });
   console.log(`${assessment.stdout}${assessment.stderr}`.trim());
   const signed = join(outDirectory, 'Rna Agent.app'); rmSync(signed, { recursive: true, force: true }); cpSync(app, signed, { recursive: true, verbatimSymlinks: true });
   const sha = execFileSync('/usr/bin/shasum', ['-a', '256', dmg], { encoding: 'utf8' }).split(' ')[0];
-  console.log(JSON.stringify({ dmg, app: signed, sha256: sha, version: buildManifest.version, arch: buildManifest.arch, notarized: Boolean(profile) }, null, 2));
+  console.log(JSON.stringify({ dmg, app: signed, sha256: sha, version: buildManifest.version, arch: buildManifest.arch, notarized: Boolean(profile), imageNotarized }, null, 2));
 } finally {
   if (mounted) spawnSync('/usr/bin/hdiutil', ['detach', mounted, '-force', '-quiet']);
   rmSync(work, { recursive: true, force: true });
