@@ -1,0 +1,742 @@
+[
+  {
+    "version": "0.75.0",
+    "sdk": "0.60.0",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "没人看的日程，只问一次要不要暂停",
+      "en": "A schedule nobody opens is asked about once"
+    },
+    "items": [
+      {
+        "zh": "某个日程连续几次送达的结果都没被打开，其中最早一条已经等了两天以上，而你之后没在项目里说过话：你回来时会在输入框上方被问一次，这个日程最近几次的结果都没人看，要暂停吗？只有你点“暂停”才会暂停，系统不会自己停掉日程，任务文本和规则也不会动。",
+        "en": "When several deliveries of a schedule in a row have gone unopened, the earliest of them has waited two days or more, and you have not written in the project since, you are asked once above the composer when you are back: nobody has opened the last few results, pause it? Only your click on Pause pauses it. The app never stops a schedule by itself, and the task text and rule stay as they are."
+      },
+      {
+        "zh": "“没被打开”看的是收件箱里的已读记录：回复、操作、点赞点踩、关闭，或你之后改过这个日程，都算看到了；日报本来就不需要回复，所以没回复不算。连续次数的门槛至少是 3 次，并随你回来后读完过的最长一段而变。",
+        "en": "Unopened is read from the inbox: a reply, an action, a thumbs up or down, a dismissal, or an edit you made to the schedule afterwards all count as seen. A daily report needs no reply, so no reply does not count. The streak needed is at least 3 and follows the longest run you read through after coming back."
+      },
+      {
+        "zh": "你选择继续运行后，下一次要等到比这一次长一倍的没人看才会再问，没有固定间隔；你在对话里已经说过日报继续跑的话就不会问。",
+        "en": "If you choose to keep it running, the next question waits for a run of unopened results twice as long, with no fixed interval, and you are not asked at all if you have already said in the conversation that the report should keep running."
+      }
+    ]
+  },
+  {
+    "version": "0.74.0",
+    "sdk": "0.60.0",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "安静的项目不再为同一个“等待”重复付费",
+      "en": "Quiet projects stop paying twice for the same wait"
+    },
+    "items": [
+      {
+        "zh": "项目没有新情况，而且发给模型的内容和它上一次决定“等待”时完全一样（只差时钟）时，后台不再重新问一遍，而是遵守它上一次自己说的“可以歇多久”。有新消息、新证据或它看得到的任何变化，以及它要求的休息结束，都照常决策。",
+        "en": "When a project has nothing new and what the model would be sent is exactly what it saw when it last chose to wait (only the clock differs), the background no longer asks again and keeps the rest the model itself asked for. A new message, new evidence, any change it can see, or the end of that rest all decide as before."
+      },
+      {
+        "zh": "起因是线上一个项目：用户离开五天，65 次后台唤醒用了约 470 万 token，其中 43 次只是对几乎相同的内容再答一次“等待”，而它上一次说的是可以歇 15 个小时。按 31 天的唤醒记录估算，这类唤醒最多占后台决策 token 的 22%，实际省多少取决于模型每次要的休息时长。",
+        "en": "It started from one live project: with its user away for five days, 65 background wakes used about 4.7 million tokens, and 43 of them only answered wait again on nearly identical input while its last wait said it could rest 15 hours. Over 31 days of wake records such wakes are at most 22% of background decision tokens; the real saving depends on the rest the model asks for."
+      },
+      {
+        "zh": "代价是：模型对同一份输入偶尔先选等待、之后又选了工作，这些补核会推迟到它自己要的休息结束或出现新证据之后。更小的上下文也用付费重放验证过（34 个真实案例，每次省 91.5% 的 token），但它漏掉了完整请求选的 3 个工作，所以没有上线。",
+        "en": "The cost: on the same input the model sometimes chooses wait first and work later, and that follow-up now waits for the end of its own rest or new evidence. A smaller context was also checked with a paid replay (34 real cases, 91.5% fewer tokens per wake), but it missed the 3 works the full request chose, so it was not shipped."
+      },
+      {
+        "zh": "体验报告新增“因未变化而不再询问”的次数和估计省下的 token，上线后可以和上面的估算对照。",
+        "en": "The experience report gains the number of wakes not asked because nothing changed and the tokens that saved, to check against the estimate once released."
+      }
+    ]
+  },
+  {
+    "version": "0.73.1",
+    "sdk": "0.59.0",
+    "date": "2026-10-11",
+    "title": {
+      "zh": "macOS 应用经过签名和公证",
+      "en": "The macOS app is signed and notarized"
+    },
+    "items": [
+      {
+        "zh": "行为与 0.73.0 相同。发布流程现在用 Developer ID 给 macOS 应用签名并提交苹果公证；磁盘映像只在苹果一小时内返回结果时才一并公证，否则只有应用本身通过公证。",
+        "en": "Behavior is the same as 0.73.0. The release workflow now signs the macOS app with a Developer ID and submits it to Apple for notarization; the disk image is notarized as well only when Apple answers within an hour, otherwise only the app itself is notarized."
+      }
+    ]
+  },
+  {
+    "version": "0.73.0",
+    "sdk": "0.59.0",
+    "date": "2026-10-10",
+    "title": {
+      "zh": "记忆不再依赖 Docker，联网搜索可选服务",
+      "en": "Memory without Docker, and a choice of web search service"
+    },
+    "items": [
+      {
+        "zh": "“设置 → 记忆”里新增“本地记忆（内置）”：不需要 Docker、向量模型或文本模型，对话原样存在本机一个 SQLite 文件里，按关键词检索。它不理解同义说法，也不跨语言；OpenViking 语义记忆仍可选，两边的记忆互不迁移。",
+        "en": "Settings → Memory gains a built-in local memory that needs no Docker, embedding model or text model. Conversations are stored as written in one local SQLite file and searched by keyword. It does not understand paraphrases or other languages; OpenViking semantic memory is still available, and the two keep separate memories."
+      },
+      {
+        "zh": "在 112 轮真实对话上重放，同一对话里更早的一轮排在第一的占 90%，进入前五的占 98%；样本只有 6 个对话，只说明排序可用。",
+        "en": "Replayed over 112 real turns, an earlier turn of the same conversation ranked first 90% of the time and in the top five 98%. The sample is 6 conversations, so it shows ranking is usable, not exact recall."
+      },
+      {
+        "zh": "联网搜索和网页读取可在设置里选服务：FastCRW（默认）、Firecrawl、Tavily、Brave、智谱、博查；模型看到的仍是同样两个工具。换服务时不会把原来的密钥带给新服务。其中 Firecrawl（无密钥）和直连读取页面做过真实验证，其余按文档接口写成，只用本地模拟数据测过。",
+        "en": "Web search and page reading run over the service chosen in settings: FastCRW (default), Firecrawl, Tavily, Brave, Zhipu or Bocha; the model sees the same two tools. Switching service does not carry the old key over to the new one. Firecrawl without a key and direct page reading were verified live; the others follow their documented interfaces and were tested against local fixtures only."
+      }
+    ]
+  },
+  {
+    "version": "0.72.0",
+    "sdk": "0.58.0",
+    "date": "2026-10-10",
+    "title": {
+      "zh": "改文件失败更少，失败原因更清楚",
+      "en": "Fewer failed edits, clearer failure causes"
+    },
+    "items": [
+      {
+        "zh": "读文件时行号与正文之间改用制表符分隔，避免缩进行被多写一个空格。精确匹配失败、但只差一个前导分隔符时，编辑会按这种差异应用并在结果里注明；有多处匹配则拒绝并说明怎么改。在 31 次真实的“找不到旧文本”失败上重放，15 次现在能按原意应用。",
+        "en": "File reads now separate the line number from the text with a tab, so indented lines no longer gain a stray space. When an exact match fails by one leading separator, the edit applies that way and says so; several matches are refused with what to change. Replayed on 31 real “text not found” failures, 15 now apply as intended."
+      },
+      {
+        "zh": "网页读取失败时，错误信息会说明是否值得重试、可以去哪里找；命令的工作目录被拒绝时也说明它相对的是哪里。",
+        "en": "When a web fetch fails, the message says whether to try again and where else to look; a refused working directory for a command now says what it is relative to."
+      },
+      {
+        "zh": "系统进化页把工具失败按原因分类（调用有误、环境问题、被拒绝、被中断），只有模型自己的调用错误才会被当成工具描述需要改进；设置页显示这张表。",
+        "en": "The evolution page sorts tool failures by cause (call error, environment, refused, interrupted); only the model’s own call errors count toward a tool description needing a change. Settings shows the table."
+      }
+    ]
+  },
+  {
+    "version": "0.71.0",
+    "sdk": "0.57.0",
+    "date": "2026-10-10",
+    "title": {
+      "zh": "界面语言贯穿到报错和命令行，Claude 路径经真实接口验证",
+      "en": "Interface language reaches errors and the CLI; the Claude path verified live"
+    },
+    "items": [
+      {
+        "zh": "模型读到的提示、交接说明和工具文字固定为英文，面向你的输出按界面语言；接口返回的错误信息和命令行的帮助、用法与输出也跟随界面语言，你自己的文字、路径和名称原样保留。",
+        "en": "Text the model reads (prompts, handoffs, tool descriptions) is fixed English while what you read follows the interface language; API error messages and the CLI’s help, usage and output follow it too, with your own words, paths and names kept as they are."
+      },
+      {
+        "zh": "Claude 路径用真实 Anthropic 接口跑完一组探针，全部通过。发现并修正一处：思考块被拒时，日志里指向的消息位置会因工具往返而错位，现在映射回真实位置；恢复动作本身不受影响。",
+        "en": "The Claude path ran a set of probes against the real Anthropic API and all passed. One fix came out of it: when a thinking block is rejected, the message position in the log was off after tool round trips and now maps back to the real one; recovery itself was unaffected."
+      },
+      {
+        "zh": "0.71.1：在模型设置里移除的模型保存后不再被“拉取模型列表”加回来，重新保存它才会恢复。ChatGPT 订阅登录的图像生成现在提供三个模型，并且真的按你选的模型发出请求（此前总是 gpt-image-2）。",
+        "en": "0.71.1: a model removed in the provider editor no longer comes back when the model list is fetched; saving it again restores it. Image generation with a ChatGPT login now offers three models and sends the one you chose (it always sent gpt-image-2 before)."
+      },
+      {
+        "zh": "没有 WebGL 的环境（关闭或屏蔽了 GPU 加速）里，空状态的背景动画会保持为空，不再因抛错让整个应用白屏；0.70.0 和 0.71.0 受此影响。",
+        "en": "Without WebGL (GPU acceleration disabled or blocklisted), the empty state’s background animation stays empty instead of throwing and blanking the whole app; 0.70.0 and 0.71.0 were affected."
+      }
+    ]
+  },
+  {
+    "version": "0.70.0",
+    "sdk": "0.56.0",
+    "date": "2026-10-10",
+    "title": {
+      "zh": "主动发言和项目笔记跟随界面语言",
+      "en": "Proactive text and project notes follow the interface language"
+    },
+    "items": [
+      {
+        "zh": "宿主写的主动发言文字（今日摘要、对话收尾、欢迎回来、直接修复和后台求助卡片）按界面语言显示，客户端按结构化字段渲染。",
+        "en": "Text the host writes for proactive messages (daily digest, thread close, welcome back, direct fix and background-help cards) follows the interface language, and clients render it from structured fields."
+      },
+      {
+        "zh": "项目笔记的卡片、选项、原因和接口错误跟随界面语言。",
+        "en": "Project mind cards, options, reasons and API errors follow the interface language."
+      },
+      {
+        "zh": "记忆服务临时不可用时，交付结果的索引写入不再被记成“已丢失”。",
+        "en": "When the memory service is briefly unavailable, a delivery’s index write is no longer recorded as lost."
+      }
+    ]
+  },
+  {
+    "version": "0.69.0",
+    "sdk": "0.56.0",
+    "date": "2026-10-06",
+    "title": {
+      "zh": "静音即暂停，用量页只看 token",
+      "en": "Mute pauses, and the usage page shows tokens only"
+    },
+    "items": [
+      {
+        "zh": "暂停主动发言同时暂停定时任务：静音期间不启动，到点的窗口记为已跳过；解除静音后，仍在一个周期内且任务没变的会原地恢复。静音前已开始的执行，结果只放进收件箱。结果等了超过一个周期才交付的，改放收件箱。",
+        "en": "Pausing proactive messages now pauses scheduled tasks too: nothing starts while muted and windows that fall due are recorded as skipped. After unmuting, a skipped window still within one period and unchanged resumes in place. A run already started before muting delivers only to the inbox, as does a result that waited more than one period."
+      },
+      {
+        "zh": "用量页只显示 token，不再显示按价格折算的数字，并把探针判断与正常对话分开，最大的运行按 token 排序。",
+        "en": "The usage page shows tokens only, with no price-weighted figures, keeps probe judgments apart from normal conversations and ranks the largest runs by tokens."
+      },
+      {
+        "zh": "定时任务只声明自己能执行的工具；首次请求里任务内容只出现一次，压缩后也保留。",
+        "en": "A scheduled run declares only the tools it can execute, and its first request carries the task once, kept after a compaction."
+      },
+      {
+        "zh": "回退一轮时，OpenViking 里对应的记忆也一并回滚，远端会话一并删除。",
+        "en": "Rolling back a turn now reaches OpenViking too: the matching memory is restored byte for byte and the remote session removed."
+      }
+    ]
+  },
+  {
+    "version": "0.68.0",
+    "sdk": "0.55.0",
+    "date": "2026-10-05",
+    "title": {
+      "zh": "启动更轻，子代理结果更可靠",
+      "en": "Lighter start-up and more reliable subagent results"
+    },
+    "items": [
+      {
+        "zh": "索引只带界面需要的字段（协议 3）：首屏数据从 821 KB 降到约 67 KB，空闲时不再每 5 秒整份重新加载。数字来自 docs/planning/next-phase-plan-20261004.md。",
+        "en": "The index carries only the fields the interface needs (protocol 3): first-screen data drops from 821 KB to about 67 KB, and an idle app no longer reloads the whole index every 5 seconds. Figures from docs/planning/next-phase-plan-20261004.md."
+      },
+      {
+        "zh": "子代理的结果一定会回到模型手里；合并采用 mu 式的待合并策略。",
+        "en": "A subagent’s result always reaches the model, with mu-style pending merges."
+      },
+      {
+        "zh": "压缩可以跨边界回退，并带结构化的检查点摘要与文件清单。",
+        "en": "Compaction can rewind across its boundary and carries a structured checkpoint summary and file list."
+      },
+      {
+        "zh": "文件编辑支持一次多处修改，并拒绝覆盖没读过的文件；沙箱更严；记忆页上已确定的损失直接进入历史，摘要失败不再让健康检查一直不通过。",
+        "en": "File edits accept several changes at once and refuse to overwrite files that were not read; the sandbox is stricter; settled memory losses go straight to history and a failed summary no longer keeps the health check red."
+      }
+    ]
+  },
+  {
+    "version": "0.67.0",
+    "sdk": "0.54.0",
+    "date": "2026-10-05",
+    "title": {
+      "zh": "账目说实话，后台调用更稳",
+      "en": "Honest accounting and steadier background calls"
+    },
+    "items": [
+      {
+        "zh": "内部调用的推理强度：Claude、DeepSeek、Codex 直接用模型默认值；GLM 上 JEV 的选择先只记录，通过付费回放验证后才会启用。",
+        "en": "Reasoning effort for internal calls: Claude, DeepSeek and Codex use the model default; on GLM the JEV choice is only recorded until a paid replay passes."
+      },
+      {
+        "zh": "用量账目更准确：中止和未报告用量的请求按估算入账，叙述、心智和进化各有自己的用途名。",
+        "en": "Usage accounting is more accurate: aborted and unreported requests are counted by estimate, and narrator, mind and evolution each have their own purpose."
+      },
+      {
+        "zh": "基因的工具和技能名跨代保持不变，进化不再让整段会话缓存失效；前台轮次进行中，不再为它自己的消息另做主动决策。",
+        "en": "Gene tool and skill names stay the same across generations, so evolution no longer invalidates the session cache; while a foreground turn runs, no separate proactive decision is made for its own message."
+      },
+      {
+        "zh": "0.67.1：安装包在界面构建比源码旧时会重新构建界面（0.63.2 到 0.67.0 发出的是旧界面）。",
+        "en": "0.67.1: the package rebuilds the web UI when its build is older than its sources (0.63.2 to 0.67.0 shipped a stale UI)."
+      }
+    ]
+  },
+  {
+    "version": "0.66.0",
+    "sdk": "0.53.0",
+    "date": "2026-10-04",
+    "title": {
+      "zh": "Claude 用 API key 接入，空闲时后台压缩",
+      "en": "Claude through an API key, and background compaction when idle"
+    },
+    "items": [
+      {
+        "zh": "Claude 只通过 Anthropic API key 使用：历史只追加不改写，空闲时发保温请求让缓存不过期。",
+        "en": "Claude is used only through an Anthropic API key: history is append-only and a keep-alive request stops the cache expiring while idle."
+      },
+      {
+        "zh": "空闲时间超过缓存存活期且上下文过半时，后台自动压缩，保留最近 2 轮。",
+        "en": "When idle past the cache lifetime with the context over half full, it compacts in the background and keeps the last 2 turns."
+      },
+      {
+        "zh": "缓存已经冷掉时，折叠被取代的上下文副本；心智上下文与协作上下文分开，稳定的部分不再每轮变化。",
+        "en": "When the cache is already cold, superseded copies of context are folded; the mind and collaboration contexts are split so the stable part stops changing every turn."
+      }
+    ]
+  },
+  {
+    "version": "0.65.0",
+    "sdk": "0.52.0",
+    "date": "2026-10-04",
+    "title": {
+      "zh": "记忆证据受保护，定时报告完整送达",
+      "en": "Memory evidence protected, scheduled reports delivered whole"
+    },
+    "items": [
+      {
+        "zh": "记忆外发只认显式撤销，别的项目的进化或新建对话不再影响本项目的回执、运行中的工作和待发的定时交付；历史上丢失的证据可以恢复（线上状态副本恢复了 169 个历史行动和 47 份交付证据）。",
+        "en": "Memory is withdrawn only on explicit revocation, so another project’s evolution or a new conversation no longer affects this project’s receipts, running work or pending scheduled deliveries; lost historical evidence can be restored (a copy of live state recovered 169 past actions and 47 delivery records)."
+      },
+      {
+        "zh": "记忆健康分为“未决”和“已知损失”，已知损失可以点“知道了”或“重试”，健康检查不再因它们一直不通过。",
+        "en": "Memory health is split into pending and known losses; a known loss can be acknowledged or retried, and the health check no longer stays red because of one."
+      },
+      {
+        "zh": "定时报告的正文完整交付，不再截掉中间；承诺只在改动真正落定后才结算，回退时重新打开。",
+        "en": "Scheduled reports are delivered in full instead of cut in the middle; a commitment settles only once the change has landed and reopens on rollback."
+      },
+      {
+        "zh": "Git 操作改为挂起而不等待；删除对话时同时清理心智和基因里的相关内容，删除流程不再卡死。",
+        "en": "Git operations are held instead of waited on; deleting a conversation also clears related mind and gene content and no longer stalls."
+      }
+    ]
+  },
+  {
+    "version": "0.64.0",
+    "sdk": "0.51.0",
+    "date": "2026-10-04",
+    "title": {
+      "zh": "它知道你回退了什么，也不再重复干活",
+      "en": "It knows what you rolled back, and stops repeating work"
+    },
+    "items": [
+      {
+        "zh": "你回退一轮、丢掉子代理的改动或还原后台改动后，下一轮对话开头会带上“用户撤销了什么”；后台也看得到，不会再提议改回去。",
+        "en": "After you roll back a turn, drop a subagent’s changes or revert background changes, the next turn starts with what you undid; the background sees it too and no longer proposes to put it back."
+      },
+      {
+        "zh": "“本轮交付”和“审阅”改为显示宿主算出的每个文件的净改动，不再把每次编辑片段相加。",
+        "en": "“Delivered this turn” and Review show the host’s net change per file instead of adding up edit snippets."
+      },
+      {
+        "zh": "新 JEV 判断点 work.coverage：后台要做的检查如果只是重复刚做完的、之后也没有新变化，就不再排队。19 个标注样例全部判对。",
+        "en": "New JEV point work.coverage: a background check that only repeats one just done, with nothing changed since, is no longer queued. All 19 labelled cases correct."
+      }
+    ]
+  },
+  {
+    "version": "0.63.0",
+    "sdk": "0.50.0",
+    "date": "2026-10-04",
+    "title": {
+      "zh": "工作树隔离、自动合并和整轮回退",
+      "en": "Worktree isolation, automatic merges and turn rollback"
+    },
+    "items": [
+      {
+        "zh": "子代理和后台各自在独立的 Git 工作树里改文件，结束后自动合并回项目；对话可以在新建时选择独立工作树。0.63.3 起对所有 Git 项目开启。",
+        "en": "Subagents and background work change files in their own Git worktrees and merge back automatically; a conversation can choose its own worktree when created. On for every Git project since 0.63.3."
+      },
+      {
+        "zh": "合并时你没提交的改动永远是一方，不碰索引、HEAD 和分支，冲突标记不会写进项目文件夹。",
+        "en": "Your uncommitted edits are always one side of a merge; index, HEAD and branches are untouched, and conflict markers never land in the project folder."
+      },
+      {
+        "zh": "每一轮都留检查点，“回退本轮”一键还原，还能撤销回退。",
+        "en": "Every turn keeps a checkpoint: “Roll back this turn” restores it in one click, and the rollback can be undone."
+      },
+      {
+        "zh": "不是 Git 仓库的项目可以一键初始化：git init、写 .gitignore、提交一次，不加远端。",
+        "en": "Projects that are not Git repositories can be initialized in one step: git init, a .gitignore and one commit, no remote."
+      }
+    ]
+  },
+  {
+    "version": "0.62.0",
+    "sdk": "0.49.0",
+    "date": "2026-10-04",
+    "title": {
+      "zh": "像 Claude 一样的改动对比，子代理该用时会用",
+      "en": "A Claude-style compare view, and subagents used when they should be"
+    },
+    "items": [
+      {
+        "zh": "“工作区改动”面板按“基准 → 目标”对比：与分支的合并基点、未提交的改动、这个对话的改动或任意本地分支，左边文件树，右边逐个文件的差异。",
+        "en": "The Workspace changes panel compares “base → target”: since the merge base with a branch, uncommitted, this conversation’s, or any local branch, with a file tree beside stacked per-file diffs."
+      },
+      {
+        "zh": "主对话会把能拆开的部分交给子代理并行去做，可以附上你的原话作为需求；上限调整为每轮 12 次、每个对话 4 个、全局 6 个。",
+        "en": "The main conversation now splits independent parts across subagents, optionally with your own words as requirements; limits are 12 per turn, 4 per conversation and 6 overall."
+      }
+    ]
+  },
+  {
+    "version": "0.61.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "文件、进化和工作区改动都能开成面板",
+      "en": "Files, evolution and workspace changes as panels"
+    },
+    "items": [
+      {
+        "zh": "文件带改动标记，可以只看改过的；布局可以保存；桌面版能在 Finder 里显示文件。",
+        "en": "Files show change marks with a changed-only filter; layouts can be saved; the desktop app can reveal files in Finder."
+      },
+      {
+        "zh": "任务页卡住的条目可以就地处理：标为完成、放弃，或一次清掉某个项目没做完的条目。",
+        "en": "Stuck task entries can be settled in place: mark done, drop, or clear a project’s unfinished items at once."
+      }
+    ]
+  },
+  {
+    "version": "0.60.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "可以自由摆放的工作区和后台任务面板",
+      "en": "An arrangeable workspace and a background tasks panel"
+    },
+    "items": [
+      {
+        "zh": "右侧变成可拆分、可拖放的工作区，有预设布局、撤销重做，移动面板不会让终端或浏览器重新加载。",
+        "en": "The right side becomes a workspace you split and drag, with preset layouts and undo/redo; moving panels never reloads a terminal or browser."
+      },
+      {
+        "zh": "后台任务面板按“需要你处理 / 进行中 / 排队 / 已完成”展示每次运行的进度、子代理和用量。",
+        "en": "The background tasks panel shows each run’s progress, subagents and usage, grouped as needs you, running, queued and finished."
+      }
+    ]
+  },
+  {
+    "version": "0.59.0",
+    "sdk": "0.48.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "一次全面的体验打磨，修了 73 个问题",
+      "en": "A full pass over the details: 73 problems fixed"
+    },
+    "items": [
+      {
+        "zh": "草稿、附件在发送、停止或切换对话时不再丢失；运行提示里不再出现工具名、JSON 或英文内部信息。",
+        "en": "Drafts and attachments survive sending, stopping and switching; runtime notices no longer show tool names, JSON or English internals."
+      },
+      {
+        "zh": "已经完成的轮次和长期规则不再被算成“欠你的事”；急停会恢复它暂停的内容。",
+        "en": "Finished turns and standing rules no longer count as owed; the emergency stop restores what it paused."
+      }
+    ]
+  },
+  {
+    "version": "0.58.0",
+    "sdk": "0.47.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "Claude 改为通过 API Key 接入",
+      "en": "Claude through an Anthropic API key"
+    },
+    "items": [
+      {
+        "zh": "Anthropic 不允许在第三方应用里使用 Claude 订阅，订阅只读咨询功能下线；设置里一键切换到 Anthropic API Key 预设。",
+        "en": "Anthropic does not allow Claude subscriptions in third-party apps, so the subscription consult is withdrawn; settings switch to the Anthropic API-key preset in one click."
+      },
+      {
+        "zh": "定时任务在各处都以“定时任务「名称」”显示，不再露出内部指令。",
+        "en": "Scheduled runs show as “Scheduled task ‘name’” everywhere instead of their internal instructions."
+      }
+    ]
+  },
+  {
+    "version": "0.57.0",
+    "sdk": "0.46.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "失败的请求留给你重试；ChatGPT 登录能生成图片",
+      "en": "Failed requests stay yours; a ChatGPT sign-in makes images"
+    },
+    "items": [
+      {
+        "zh": "前台问题失败后，后台不再用自己的模型抢着回答，对话里提供用你选的模型重试。",
+        "en": "When a question fails, the background no longer answers it with its own model; the conversation offers a retry on the model you chose."
+      },
+      {
+        "zh": "ChatGPT 订阅登录可以生成图片（gpt-image-2）和语音转文字；生成的图片直接显示在对话里。",
+        "en": "A ChatGPT plan sign-in can generate images (gpt-image-2) and transcribe speech; generated images show in the conversation."
+      }
+    ]
+  },
+  {
+    "version": "0.56.0",
+    "sdk": "0.45.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "换到上下文更小的模型也能接着聊",
+      "en": "Conversations continue on a model with a smaller window"
+    },
+    "items": [
+      {
+        "zh": "压缩改为与 pi 一致：摘要读精简记录，太长就减半重试，回答超长时先压缩再试一次。",
+        "en": "Compaction follows pi: summaries read a trimmed transcript, oversized batches retry at half size, and an oversized answer is compacted and retried once."
+      },
+      {
+        "zh": "ChatGPT Codex 的流式响应按 pi 的方式读取，订阅模型可以正常使用。",
+        "en": "ChatGPT Codex streams are read the way pi reads them, so plan models work."
+      }
+    ]
+  },
+  {
+    "version": "0.55.0",
+    "sdk": "0.44.0",
+    "date": "2026-10-03",
+    "title": {
+      "zh": "撤回 AI 文本检测和写作工具",
+      "en": "AI-text detection and writing tools withdrawn"
+    },
+    "items": [
+      {
+        "zh": "0.50.0 到 0.54.0 加入的朱雀检测、相关设置和写作工具全部撤回，恢复到 0.49.2 的做法；研究记录保留在仓库里。",
+        "en": "The Zhuque detection, its settings and the writing tools added in 0.50.0 to 0.54.0 are reverted to 0.49.2; the research record stays in the repository."
+      }
+    ]
+  },
+  {
+    "version": "0.50.0",
+    "sdk": "0.39.0",
+    "date": "2026-10-02",
+    "title": {
+      "zh": "接入腾讯朱雀 AI 文本检测（0.55.0 已撤回）",
+      "en": "Tencent Zhuque AI-text detection (withdrawn in 0.55.0)"
+    },
+    "items": [
+      {
+        "zh": "新增内置技能 ai-detection：写完先检测，只改被标出来的句子，再复查，最多三轮。在两篇以上都管用的改法，会写进项目 AGENTS.md 的“去 AI 味写法”。",
+        "en": "New built-in skill ai-detection: check the finished piece, rewrite only flagged lines, re-check, at most three rounds. Moves that worked in two or more pieces go into the project AGENTS.md."
+      },
+      {
+        "zh": "新建写作项目时，由 JEV 判断文字是不是给读者看的：是就自动装上这个技能，自己看的摘要类项目则不装。",
+        "en": "At initialization JEV decides whether a new writing project is for readers; those get the skill, private digests do not."
+      },
+      {
+        "zh": "在“设置 → 模型 → AI 检测”里可以开关、填密钥、看本月用量。免费额度用完会暂停到下月 1 日，到时自动恢复。",
+        "en": "Settings → Models → AI detection: switch, key, address and this month’s usage. A spent free quota pauses until the 1st of next month and resumes by itself."
+      }
+    ]
+  },
+  {
+    "version": "0.49.2",
+    "sdk": "0.38.2",
+    "date": "2026-10-02",
+    "title": {
+      "zh": "根据实测结果改进 JEV 的问法",
+      "en": "JEV questions tuned on measured answers"
+    },
+    "items": [
+      {
+        "zh": "“能不能写成检查”这道题改成按字面来问，误判从 5 条降到 0 条。",
+        "en": "The “can this be a check” question is now literal: false “checkable” verdicts dropped from 5 to 0."
+      },
+      {
+        "zh": "合并规则时，把规则全文交给 JEV，不再只给标题和摘要。",
+        "en": "Rule consolidation now gives JEV the rule text, not just titles and summaries."
+      }
+    ]
+  },
+  {
+    "version": "0.49.1",
+    "sdk": "0.38.1",
+    "date": "2026-10-02",
+    "title": {
+      "zh": "旧的长工具输出只留头尾",
+      "en": "Older large tool results keep head and tail"
+    },
+    "items": [
+      {
+        "zh": "参考 DeepSeek Harness 的做法，较早的大段工具输出只保留开头和结尾，省下上下文。",
+        "en": "Following the DeepSeek Harness pruner, old large tool outputs keep only their beginning and end."
+      },
+      {
+        "zh": "新增 JEV 探针，方便试验不同的问法。",
+        "en": "A JEV probe for studying question design."
+      }
+    ]
+  },
+  {
+    "version": "0.49.0",
+    "sdk": "0.38.0",
+    "date": "2026-10-02",
+    "title": {
+      "zh": "少花冤枉 token",
+      "en": "Fewer wasted tokens"
+    },
+    "items": [
+      {
+        "zh": "进化先判断再动笔：不值得写的规则，在调用大模型之前就拦下来。",
+        "en": "Evolution judges before it writes: rules not worth writing are stopped before the main model is called."
+      },
+      {
+        "zh": "写完的长文本，这一轮结束后就移出上下文。",
+        "en": "Long written text leaves the context after its turn."
+      },
+      {
+        "zh": "判断请求的缓存前缀更稳定，命中率更高。",
+        "en": "Decision requests keep a stable cache prefix."
+      }
+    ]
+  },
+  {
+    "version": "0.48.0",
+    "sdk": "0.37.0",
+    "date": "2026-10-01",
+    "title": {
+      "zh": "进化学会改旧规则，不再只会往上加",
+      "en": "Evolution revises instead of only adding"
+    },
+    "items": [
+      {
+        "zh": "新规则先和同类规则比一比：重复的停用，重叠的合并。",
+        "en": "New rules meet their kind first: repeats retire, overlaps merge."
+      },
+      {
+        "zh": "改写时，旧规则里的每条要求都会保留下来。",
+        "en": "A rewrite keeps every requirement of the rules it replaces."
+      }
+    ]
+  },
+  {
+    "version": "0.47.0",
+    "sdk": "0.36.0",
+    "date": "2026-10-01",
+    "title": {
+      "zh": "长对话可以手动压缩",
+      "en": "Manual compaction for long sessions"
+    },
+    "items": [
+      {
+        "zh": "很长的对话也能手动压缩，还能看到进度。",
+        "en": "Manual compaction works on long sessions and shows its progress."
+      },
+      {
+        "zh": "内部标签不会再混进回复里；过期的任务卡片会自动收起。",
+        "en": "Internal labels stay out of what you read; stale task cards fold."
+      }
+    ]
+  },
+  {
+    "version": "0.46.0",
+    "sdk": "0.35.0",
+    "date": "2026-10-01",
+    "title": {
+      "zh": "先分流，再拿主意",
+      "en": "Wakes route before they decide"
+    },
+    "items": [
+      {
+        "zh": "每次有动静，先判断该交给谁处理，再做决定；每个决定都注明是谁拍的板。",
+        "en": "Each wake is routed first, then decided; the decision names its judge."
+      },
+      {
+        "zh": "还没得到回答的问题，会被重新提出来。",
+        "en": "Open questions get asked."
+      }
+    ]
+  },
+  {
+    "version": "0.44.0",
+    "date": "2026-10-01",
+    "title": {
+      "zh": "后台需要你拍板时，直接在对话里问",
+      "en": "Background work that needs you is settled in the conversation"
+    },
+    "items": [
+      {
+        "zh": "后台遇到需要你决定的事，会回到对话里问你。",
+        "en": "When background work needs a decision, it comes back to the conversation."
+      },
+      {
+        "zh": "写入记忆后会自己核对一遍。",
+        "en": "Memory writes verify themselves."
+      }
+    ]
+  },
+  {
+    "version": "0.43.0",
+    "date": "2026-09-30",
+    "title": {
+      "zh": "侧栏实时显示 Agent 的浏览器",
+      "en": "The agent’s browser shows live in the side panel"
+    },
+    "items": [
+      {
+        "zh": "Agent 操作浏览器时，你能在侧栏实时看到画面。",
+        "en": "Watch the agent’s browser live in the side panel."
+      },
+      {
+        "zh": "后台做完的东西，直接出现在对话里。",
+        "en": "Background deliverables appear in the conversation."
+      }
+    ]
+  },
+  {
+    "version": "0.42.0",
+    "sdk": "0.34.2",
+    "date": "2026-09-30",
+    "title": {
+      "zh": "“完全访问”下不再逐项确认",
+      "en": "Full access stops asking"
+    },
+    "items": [
+      {
+        "zh": "项目权限设为“完全访问”后，前台和后台都能直接读写文件、执行命令。",
+        "en": "With “Full access”, foreground and background read, write and run directly."
+      },
+      {
+        "zh": "权限申请以卡片形式显示在对话里。",
+        "en": "Permission cards show in the conversation."
+      }
+    ]
+  },
+  {
+    "version": "0.39.0",
+    "sdk": "0.33.0",
+    "date": "2026-09-30",
+    "title": {
+      "zh": "后台命令进沙箱，后台改动可还原",
+      "en": "Sandboxed background commands, revertible background changes"
+    },
+    "items": [
+      {
+        "zh": "后台命令跑在 macOS 沙箱里：除了项目目录、临时目录和包缓存，别处都写不了。",
+        "en": "Background commands run under macOS seatbelt: writes are denied outside the project, temp folders and package caches."
+      },
+      {
+        "zh": "后台改过的每个文件都留了底，可以一键还原；之后又被改过的文件不会被覆盖。",
+        "en": "Background work snapshots every file it changes; one click reverts, never overwriting a file changed again afterwards."
+      },
+      {
+        "zh": "要写的内容明显违反你定过的规矩时，会被拦下并说明原因。",
+        "en": "A write that clearly breaks a constraint you stated is refused with the reason."
+      }
+    ]
+  },
+  {
+    "version": "0.36.0",
+    "sdk": "0.30.3",
+    "date": "2026-09-30",
+    "title": {
+      "zh": "任务页改版",
+      "en": "A new task page"
+    },
+    "items": [
+      {
+        "zh": "参考 OmniFocus 重做了任务页。",
+        "en": "The task page, redone after OmniFocus."
+      },
+      {
+        "zh": "生成的文字跟着界面语言走。",
+        "en": "Generated text follows the interface language."
+      }
+    ]
+  },
+  {
+    "version": "0.35.5",
+    "date": "2026-09-30",
+    "title": {
+      "zh": "进化页改成一棵简洁的技能树",
+      "en": "The evolution page becomes a quiet skill tree"
+    },
+    "items": [
+      {
+        "zh": "进化页只显示基因树和每个节点的一句话说明，想看细节再点开。",
+        "en": "Only the gene tree and one sentence per node; details open on demand."
+      }
+    ]
+  }
+]
