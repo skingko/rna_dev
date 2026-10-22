@@ -5,6 +5,7 @@ import { actionLabel } from './task-text.mjs';
 import { revokedLabel } from './project-background-controls.mjs';
 import { guardsOf } from './project-genes.mjs';
 import { guardScript } from './tool-policy.mjs';
+import { pauseVerdict, deliveriesOf } from './schedule-attention.mjs';
 
 // Light invitations shown above the composer (plan 2026-09-30 §2.1): things
 // about how we work together that the user may answer or close, never a
@@ -12,9 +13,9 @@ import { guardScript } from './tool-policy.mjs';
 // same queue and one answer removes it everywhere. The client decides when to
 // show one (only to a user who is there); the host decides what is worth
 // asking (JEV) and records every outcome as a label.
-export const INVITATION_KINDS = Object.freeze(['feedback', 'lesson', 'gene', 'commitment', 'schedule', 'task']);
+export const INVITATION_KINDS = Object.freeze(['feedback', 'lesson', 'gene', 'commitment', 'schedule', 'task', 'schedule_pause']);
 /** Kinds that ask the user to decide something (they do not lapse with the next message; plan §2.1.1). */
-export const DECISION_KINDS = Object.freeze(['lesson', 'gene', 'commitment', 'schedule', 'task']);
+export const DECISION_KINDS = Object.freeze(['lesson', 'gene', 'commitment', 'schedule', 'task', 'schedule_pause']);
 /** Failed background work judged per presence (each at most once: judged stale → closed, otherwise asked). */
 export const TASK_JUDGE_LIMIT = 4;
 /** A schedule is suggested at most once a day per project, from requests made on at least this many days. */
@@ -35,6 +36,8 @@ export function revokedTaskLabel(project, action, { language = 'zh', limit = 120
   return action ? revokedLabel(project, action, { language, limit, quoted }) : '';
 }
 const revoked = action => Boolean(action?.contextRevoked || action?.sourceDeleted);
+/** What the invite.stale judge is told a pause card asks (English, as the judge's other texts are). */
+const pauseText = (title, count) => `Pause the scheduled task “${title}”, whose last ${count} results nobody opened`;
 
 /** Queue an invitation unless the same subject was already offered in this
  * session: one thing is asked at most once, whatever the answer was. */
@@ -88,7 +91,7 @@ export function invitationMetrics(sessions) {
 }
 
 export class InvitationService {
-  constructor(store, { decisions = null, mind = null, genes = null, schedules = null, now = Date.now } = {}) { Object.assign(this, { store, decisions, mind, genes, schedules, now }); this.rejudging = new Set(); this.taskJudging = new Set(); this.suggested = new Map(); }
+  constructor(store, { decisions = null, mind = null, genes = null, schedules = null, now = Date.now } = {}) { Object.assign(this, { store, decisions, mind, genes, schedules, now }); this.rejudging = new Set(); this.taskJudging = new Set(); this.suggested = new Map(); this.pausing = new Set(); this.pauseJudged = new Set(); }
   say(variants) { return inLanguage(interfaceLanguageOf(this.store.state), variants); }
   offer(sessionId, fields) { let offered = null; this.store.mutate(state => { const session = state.sessions.find(row => row.id === sessionId); if (session && !session.archivedAt) offered = offerInvitation(session, fields, { now: this.now() }); }); return offered; }
   /** A message on the user's behalf after they chose an action in an invitation (their click, their words). It is a
@@ -145,15 +148,20 @@ export class InvitationService {
   offerSchedule(sessionId, { projectId, title, task, time, timeZone, ledgerId = null }) {
     return this.offer(sessionId, { kind: 'schedule', subject: `schedule:${String(task).slice(0, 120)}`, projectId, title: String(title).slice(0, 60), text: String(task).slice(0, 600), time, timeZone, ...(ledgerId ? { ledgerId } : {}) });
   }
-  /** The user is here (visible presence): stale decisions are judged again, an overdue request may be raised, and once a day a schedule may be suggested. */
-  async onPresence(projectId) {
+  /** The user is here (visible presence): stale decisions are judged again, an overdue request may be raised, and once a day a schedule may be suggested.
+   * `sessionId`: the conversation they have in front. The schedule check comes first and reads the inbox before this
+   * report's own reading marks (server.mjs marks the conversation read right after this call returns its promise). */
+  async onPresence(projectId, { sessionId = null } = {}) {
+    let pausing = null;
+    try { const candidate = this.pauseCandidate(projectId, sessionId); if (candidate) pausing = this.offerSchedulePause(candidate).catch(() => null); } catch { /* the other checks below still run */ }
     const folded = [...await this.rejudgeStale(projectId).catch(() => []), ...await this.refoldTasks(projectId).catch(() => [])];
     this.offerOverdue(projectId);
     await this.offerTaskAttention(projectId).catch(() => null);
     // Questions the agent has been waiting on for a day or more are asked now, in one card, while the user is here.
     const asked = await Promise.resolve(this.mind?.askOpenQuestions?.(projectId)).catch(() => null);
     const suggested = await this.suggestSchedule(projectId).catch(() => null);
-    return { folded, suggested, ...(asked ? { asked } : {}) };
+    const pause = await pausing;
+    return { folded, suggested, ...(asked ? { asked } : {}), ...(pause ? { pause } : {}) };
   }
   /** Background work that needs the user (failed, or an outcome only they can confirm), asked here instead of on the task page. */
   offerTask(sessionId, { projectId, actionId, mode, text }) {
@@ -306,6 +314,73 @@ export class InvitationService {
     const title = chosen.text.split('\n')[0].slice(0, 24);
     return this.offerSchedule(session.id, { projectId, title, task: chosen.text, time: `${String(chosen.hour).padStart(2, '0')}:00`, timeZone: zone, ledgerId: judged.ledgerId ?? null });
   }
+  /** A schedule whose last results nobody opened: asked once whether to pause it. Nothing is paused unless the user says so. */
+  offerPause(sessionId, { projectId, scheduleId, title, count, since, ledgerId = null }) {
+    return this.offer(sessionId, { kind: 'schedule_pause', subject: `schedule_pause:${scheduleId}:${since}:${count}`, projectId, scheduleId, title: String(title ?? '').replace(/\s+/g, ' ').trim().slice(0, 60), count, since, ...(ledgerId ? { ledgerId } : {}) });
+  }
+  /** The project's conversations a card can sit in (not archived, not a side chat). */
+  liveSessions(projectId, state = this.store.state) { return state.sessions.filter(row => row.projectId === projectId && !row.archivedAt && row.kind !== 'side'); }
+  /**
+   * The user is here and a schedule's last results went unread while they were away (schedule-attention.mjs pauseVerdict,
+   * all read from structure). Cards that no longer apply are closed first (the schedule is gone or off, or the user answered
+   * a result that arrived after the card did). One schedule is asked about at a time, the longest run first, in the
+   * conversation they have in front (else the project's current one). Synchronous on purpose: it reads the inbox before the
+   * reading marks of the presence report that triggered it. Returns the candidate, or null.
+   */
+  pauseCandidate(projectId, sessionId = null) {
+    const project = this.store.state.projects.find(row => row.id === projectId);
+    if (!project || project.archivedAt || this.pausing.has(projectId)) return null;
+    const sessions = this.liveSessions(projectId), now = this.now(), open = () => sessions.some(row => row.invitations?.some(item => item.kind === 'schedule_pause'));
+    if (!project.schedules?.length && !open()) return null;
+    for (const session of sessions) for (const card of (session.invitations ?? []).filter(item => item.kind === 'schedule_pause')) {
+      const schedule = project.schedules?.find(row => row.id === card.scheduleId);
+      const answeredSince = schedule?.enabled && deliveriesOf(project, schedule, sessions, { now }).some(row => row.state === 'responded' && Date.parse(row.at) > Date.parse(card.createdAt));
+      if (!schedule?.enabled || answeredSince) this.close(session.id, card.id, 'expired');
+    }
+    // One question at a time: the next schedule is asked about once this card is answered.
+    if (this.liveSessions(projectId).some(row => row.invitations?.some(item => item.kind === 'schedule_pause'))) return null;
+    const asks = (project.schedules ?? []).map(schedule => ({ schedule, verdict: pauseVerdict(project, schedule, sessions, { now }) })).filter(row => row.verdict.ask).sort((a, b) => b.verdict.count - a.verdict.count);
+    if (!asks.length) return null;
+    const front = sessionId ? sessions.find(row => row.id === sessionId) : null, target = front ?? this.mind?.discussionSession?.(projectId);
+    return target ? { projectId, sessionId: target.id, ...asks[0] } : null;
+  }
+  /**
+   * The card for a candidate. Whether to ask is code; the one thing code cannot read is whether the user already said, in
+   * words, that the results should keep coming unread ("keep it running, I'll read them when I'm back"): JEV invite.stale
+   * judges that from their latest messages (12 labelled cases: stale at p ≤ .24, every other conversation ≥ .40; see
+   * docs/research/schedule-pause-invitation-20261022.md), a veto only: no judge or no verdict asks. A vetoed state is not
+   * judged again until the run grows. The record in `project.schedulePauseAsks` is what a refusal leaves behind.
+   */
+  async offerSchedulePause({ projectId, sessionId, schedule, verdict }) {
+    const key = `${schedule.id}:${verdict.since}:${verdict.count}`;
+    if (this.pauseJudged.has(key) || this.pausing.has(projectId)) return null;
+    this.pausing.add(projectId);
+    try {
+      let ledgerId = null;
+      if (typeof this.decisions?.inviteStale === 'function') {
+        const project = this.store.state.projects.find(row => row.id === projectId);
+        const said = this.liveSessions(projectId).flatMap(row => row.items ?? []).filter(item => item.kind === 'user' && typeof item.text === 'string' && item.text.trim() && !item.simulated).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).slice(-8).map(item => ({ role: 'user', text: item.text }));
+        const judged = await this.decisions.inviteStale(project, { kind: 'schedule_pause', text: pauseText(schedule.title, verdict.count), createdAt: new Date(this.now()).toISOString(), conversation: said }).catch(() => null);
+        if (judged?.stale) { if (this.pauseJudged.size > 200) this.pauseJudged.clear(); this.pauseJudged.add(key); this.label(judged, 'folded'); return null; }
+        ledgerId = judged?.ledgerId ?? null;
+      }
+      // The state may have moved during the judgment: ask only about a schedule that is still on and while no pause card is open.
+      const live = this.store.state.projects.find(row => row.id === projectId), now = this.now();
+      if (!live?.schedules?.find(row => row.id === schedule.id)?.enabled || this.liveSessions(projectId).some(row => row.invitations?.some(item => item.kind === 'schedule_pause'))) return null;
+      const offered = this.offerPause(sessionId, { projectId, scheduleId: schedule.id, title: schedule.title, count: verdict.count, since: verdict.since, ledgerId });
+      if (offered) this.store.mutate(state => { const target = state.projects.find(row => row.id === projectId); if (target) target.schedulePauseAsks = { ...(target.schedulePauseAsks ?? {}), [schedule.id]: { ...(target.schedulePauseAsks?.[schedule.id] ?? {}), at: new Date(now).toISOString(), since: verdict.since, run: verdict.count, outcome: 'asked' } }; });
+      return offered;
+    } finally { this.pausing.delete(projectId); }
+  }
+  /** What the user's answer to a pause card leaves in the project: a refusal (keep, or closing the card) raises the bar for the next ask to twice the run they refused. */
+  notePauseAnswer(row, outcome) {
+    this.store.mutate(state => {
+      const project = state.projects.find(item => item.id === row.projectId), prior = project?.schedulePauseAsks?.[row.scheduleId];
+      if (!project) return;
+      const refused = outcome === 'declined' || outcome === 'dismissed';
+      project.schedulePauseAsks = { ...(project.schedulePauseAsks ?? {}), [row.scheduleId]: { ...(prior ?? { since: row.since, run: row.count }), outcome, answeredAt: new Date(this.now()).toISOString(), ...(refused ? { refusedRun: Math.max(prior?.refusedRun ?? 0, row.count ?? 0) } : {}) } };
+    });
+  }
   /** The user is back (visible presence): decision invitations left open for over a day are judged
    * again (JEV invite.stale) against what was said since; ones that no longer matter are folded away.
    * Each invitation is re-judged at most once a day. */
@@ -319,7 +394,7 @@ export class InvitationService {
     try {
       for (const { session, row } of due.slice(0, 4)) {
         const conversation = (session.items ?? []).filter(item => ['user', 'assistant'].includes(item.kind) && Date.parse(item.createdAt ?? 0) > Date.parse(row.createdAt) && typeof item.text === 'string' && item.text.trim()).slice(-8).map(item => ({ role: item.kind, text: item.text }));
-        const text = row.kind === 'lesson' ? `Confirm the learned rule: ${row.text}` : row.kind === 'commitment' ? `Keep working on the earlier request: ${row.text}` : row.kind === 'task' ? (row.mode === 'review' ? `Confirm the outcome of interrupted background work: ${row.text}` : `Retry background work that did not finish: ${row.text}`) : row.kind === 'schedule' ? `Run this every day at ${row.time}: ${row.text}` : row.action === 'fix_hits' ? `Fix the ${row.total} existing hits of the check "${row.title}"` : `Retire the ${row.usage === 'never_caught' || String(row.geneId ?? '').startsWith('guard:') ? 'check' : 'skill'} "${row.title}"`;
+        const text = row.kind === 'lesson' ? `Confirm the learned rule: ${row.text}` : row.kind === 'commitment' ? `Keep working on the earlier request: ${row.text}` : row.kind === 'task' ? (row.mode === 'review' ? `Confirm the outcome of interrupted background work: ${row.text}` : `Retry background work that did not finish: ${row.text}`) : row.kind === 'schedule' ? `Run this every day at ${row.time}: ${row.text}` : row.kind === 'schedule_pause' ? pauseText(row.title, row.count) : row.action === 'fix_hits' ? `Fix the ${row.total} existing hits of the check "${row.title}"` : `Retire the ${row.usage === 'never_caught' || String(row.geneId ?? '').startsWith('guard:') ? 'check' : 'skill'} "${row.title}"`;
         const verdict = await this.decisions.inviteStale(project, { kind: row.kind, text, createdAt: row.createdAt, conversation }).catch(() => null);
         this.store.mutate(state => { const live = state.sessions.find(item => item.id === session.id)?.invitations?.find(item => item.id === row.id); if (live) live.rejudgedAt = new Date(this.now()).toISOString(); });
         if (verdict?.stale) { this.store.mutate(state => closeInvitation(state.sessions.find(item => item.id === session.id), row.id, 'expired', { now: this.now() })); if (verdict.ledgerId) this.label({ ledgerId: verdict.ledgerId }, 'folded'); folded.push(row.id); }
@@ -338,7 +413,7 @@ export class InvitationService {
   /** POST /api/v2/sessions/:id/invitations/:invitationId
    * { action: 'shown' } (the strip put it in front of the user; the next message they send instead lets it lapse)
    * | { action: 'dismiss' } | { action: 'answer', choice: 'confirm'|'revoke'|'rewrite', text? } (lesson)
-   * | { action: 'answer', choice: 'retire'|'keep' } (gene). */
+   * | { action: 'answer', choice: 'retire'|'keep' } (gene) | { action: 'answer', choice: 'pause'|'keep' } (schedule_pause). */
   async act(sessionId, invitationId, input = {}) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['action', 'choice', 'text'].includes(key)) || !['shown', 'dismiss', 'answer'].includes(input.action)) throw fail('请求只能包含 action（shown、dismiss 或 answer）以及 choice、text');
     const row = this.session(sessionId).invitations?.find(item => item.id === invitationId);
@@ -351,6 +426,7 @@ export class InvitationService {
       this.store.mutate(state => closeInvitation(state.sessions.find(item => item.id === sessionId), invitationId, 'dismissed', { now: this.now() }));
       this.label(row, 'invite_dismissed');
       if (row.kind === 'lesson') this.mind?.answerLessonInvitation(row.projectId, row.lessonId, { choice: 'dismiss', sessionId });
+      if (row.kind === 'schedule_pause') this.notePauseAnswer(row, 'dismissed');
       return { sessionId, invitationId, closed: true, outcome: 'dismissed', revision: this.store.state.revision };
     }
     const answered = label => { this.store.mutate(state => closeInvitation(state.sessions.find(item => item.id === sessionId), invitationId, 'answered', { now: this.now() })); this.label(row, label); return { sessionId, invitationId, closed: true, outcome: 'answered', revision: this.store.state.revision }; };
@@ -401,6 +477,16 @@ export class InvitationService {
         this.schedules.create(row.projectId, { title: row.title, task: row.text, rule: { kind: 'daily', time: row.time, timeZone: row.timeZone }, enabled: true, destinationSessionId: sessionId }, { requestId: row.id, source: 'user', sessionId });
       }
       return answered(input.choice === 'accept' ? 'schedule_accepted' : 'schedule_declined');
+    }
+    if (row.kind === 'schedule_pause') {
+      expect(['pause', 'keep']);
+      if (input.choice === 'pause') {
+        if (!this.schedules) throw fail('日程服务未启用', 503, 'schedules_unavailable');
+        // Only `enabled` changes, as a pause from the schedule page does (the user's own edit): the task, rule and destination stay as written.
+        if (this.store.state.projects.find(item => item.id === row.projectId)?.schedules?.find(item => item.id === row.scheduleId)?.enabled) this.schedules.update(row.projectId, row.scheduleId, { enabled: false });
+      }
+      this.notePauseAnswer(row, input.choice === 'pause' ? 'accepted' : 'declined');
+      return answered(input.choice === 'pause' ? 'schedule_pause_accepted' : 'schedule_pause_declined');
     }
     if (row.kind !== 'lesson') throw fail('这条邀请通过评价回复来回答');
     if (!['confirm', 'revoke', 'rewrite'].includes(input.choice) || input.choice === 'rewrite' && (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 1000) || input.choice !== 'rewrite' && input.text !== undefined) throw fail('choice 必须为 confirm、revoke 或 rewrite（rewrite 需要 1–1000 字的 text）');

@@ -175,6 +175,6 @@ export const mindApi = {
   feedback: (sessionId: string, itemId: string, body: { vote: FeedbackVote; comment?: string }) =>
     req<{ feedback?: ItemFeedback } | null>(`/api/v2/sessions/${enc(sessionId)}/items/${enc(itemId)}/feedback`, 'POST', body),
   /** Close (`dismiss`) or answer a composer invitation; a lesson answer confirms, retires or rewrites it. */
-  invitation: (sessionId: string, invitationId: string, body: { action: 'shown' } | { action: 'dismiss' } | { action: 'answer'; choice: 'confirm' | 'revoke' | 'rewrite'; text?: string } | { action: 'answer'; choice: 'retire' | 'keep' | 'fix' | 'later' | 'continue' | 'drop' | 'accept' | 'decline' }) =>
+  invitation: (sessionId: string, invitationId: string, body: { action: 'shown' } | { action: 'dismiss' } | { action: 'answer'; choice: 'confirm' | 'revoke' | 'rewrite'; text?: string } | { action: 'answer'; choice: 'retire' | 'keep' | 'fix' | 'later' | 'continue' | 'drop' | 'accept' | 'decline' | 'pause' }) =>
     req<{ closed: boolean; outcome?: string }>(`/api/v2/sessions/${enc(sessionId)}/invitations/${enc(invitationId)}`, 'POST', body),
 }

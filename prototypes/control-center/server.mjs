@@ -730,7 +730,7 @@ export function createServer({ stateFile = resolve(root, '.state/state.json'), t
       if (observation && req.method === 'POST') return send(201, store.observeProject(observation[1], input));
       const presence = pathname.match(/^\/api\/projects\/([a-zA-Z0-9-]+)\/presence$/);
       if (presence && req.method === 'POST') {
-        const saved = store.presence(presence[1], input); if (saved?.visible !== false) void invitations.onPresence(presence[1]).catch(() => {});
+        const saved = store.presence(presence[1], input); if (saved?.visible !== false) void invitations.onPresence(presence[1], { sessionId: saved?.sessionId }).catch(() => {});
         // Messages in the conversation the user has in front are read there; the bell keeps only what they have not seen.
         if (saved?.visible === true) try { readSeenInConversation(store, presence[1], saved.sessionId); } catch { /* never blocks presence */ }
         // Typing in a conversation: its next turn's MCP servers start now (zcode-style prewarm), off the request path.

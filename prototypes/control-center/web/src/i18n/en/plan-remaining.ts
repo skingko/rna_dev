@@ -66,6 +66,10 @@ export default {
   '不用了': 'No need',
   '你这几天都让我“{title}”，要我每天 {time} 自动做吗？': 'You’ve asked for “{title}” several days running. Do it every day at {time}?',
   '好，每天做': 'Yes, daily',
+  '日程“{title}”最近 {count} 次的结果都没人看，要暂停吗？': 'Nobody has opened the last {count} results of the schedule “{title}”. Pause it?',
+  '好，已暂停。': 'OK, paused.',
+  '继续运行': 'Keep running',
+  '暂停': 'Pause',
   '不用': 'No',
   // Background changes (§4.4)
   '已回退': 'Reverted',

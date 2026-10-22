@@ -9,9 +9,9 @@ import type { Invitation } from '@/api/types'
 
 /** Active = the window is visible and the user did something within this window. */
 export const ACTIVE_WINDOW_MS = 10 * 60_000
-const KINDS = new Set(['feedback', 'lesson', 'gene', 'commitment', 'schedule', 'task'])
+const KINDS = new Set(['feedback', 'lesson', 'gene', 'commitment', 'schedule', 'task', 'schedule_pause'])
 /** Feedback concerns the reply just read, so it goes first; a lesson, then an evolution decision, can wait their turn. */
-const ORDER: Record<string, number> = { feedback: 0, task: 1, commitment: 1, lesson: 2, gene: 3, schedule: 4 }
+const ORDER: Record<string, number> = { feedback: 0, task: 1, commitment: 1, lesson: 2, gene: 3, schedule: 4, schedule_pause: 4 }
 
 export interface InvitationGate {
   /** The session is idle (no turn running, paused or failed). */

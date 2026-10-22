@@ -28,7 +28,7 @@ const bytes = value => Buffer.byteLength(value);
 // Provider presets serve the settings catalog (GET /api/configuration); keep them out of every bootstrap/index payload.
 const publicConfiguration = store => { const { providerPresets: _presets, ...rest } = store.configurationService.public(); return rest; };
 // Left out of GET /api/v2/projects/:id unless asked for with ?include= (index rows are allowlists: index-schema.mjs).
-export const PROJECT_HEAVY = ['versions', 'jobs', 'decisions', 'learningRuntime', 'observations', 'memorySessions', 'facts', 'inbox', 'mind', 'genes', 'taskMarks', 'backgroundChanges', 'diagnostics'];
+export const PROJECT_HEAVY = ['versions', 'jobs', 'decisions', 'learningRuntime', 'observations', 'memorySessions', 'facts', 'inbox', 'mind', 'genes', 'taskMarks', 'schedulePauseAsks', 'backgroundChanges', 'diagnostics'];
 const PROJECT_INCLUDE = new Set([...PROJECT_HEAVY, 'initiativeRuntime']);
 export const MAX_EVENT_BYTES = 64 * 1024;
 const DELTA_CHUNK = 8000; // ≤ 8000 UTF-16 units stays far below 64KB even with JSON escaping.

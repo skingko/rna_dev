@@ -456,6 +456,10 @@ export interface Invitation {
   /** schedule: the suggested daily time */
   time?: string
   timeZone?: string
+  /** schedule_pause: a schedule whose last `count` results nobody opened while the user was away (`since`: when the oldest arrived); `title` is the schedule's */
+  scheduleId?: string
+  count?: number
+  since?: ISODate
 }
 
 /**

@@ -40,7 +40,7 @@ const REASON_QUESTIONS: Record<string, string> = localized({
 const GENE_QUESTIONS: Record<string, string> = localized({ unused: '技能「{title}」一个月没用过了，要停用吗？', never_caught: '检查「{title}」运行了 {runs} 次都没发现问题，要停用吗？', no_effect: '对照最近的对话，「{title}」好像没起作用，要停用吗？', not_checkable: '检查「{title}」查的是需要判断的内容，程序查不准。要停用这项检查吗？规则本身会留下。', never_ran: '检查「{title}」还从没运行过（没有匹配的文件）。工具位已满，要停用它吗？', never_followed: '做法「{title}」已有 {runs} 次用得上，却一次都没照做过。要停用吗？', harm: '同一个定时任务里，「{title}」出现之后被纠正得更多了，要停用吗？' })
 const DONE_MS = 2200, THANKS_MS = 4000
 /** Decisions are asked once: the host learns this one was put in front of the user, so a message they send instead lets it lapse. */
-const DECISION_KINDS = new Set(['lesson', 'gene', 'commitment', 'schedule', 'task'])
+const DECISION_KINDS = new Set(['lesson', 'gene', 'commitment', 'schedule', 'task', 'schedule_pause'])
 const reported = new Set<string>()
 /** Invitations the user answered or closed here: never shown again, even before the host's update arrives. */
 const settled = new Set<string>()
@@ -126,9 +126,9 @@ export function NudgeStrip({ sessionId, typing }: { sessionId: string | null; ty
   }
   // Lesson: confirm, retire, or say it better.
   // Evolution decision: retire it, or keep it (never asked again).
-  const decide = async (choice: 'retire' | 'keep' | 'fix' | 'later' | 'continue' | 'drop' | 'accept' | 'decline') => {
+  const decide = async (choice: 'retire' | 'keep' | 'fix' | 'later' | 'continue' | 'drop' | 'accept' | 'decline' | 'pause') => {
     if (!invitation) return
-    finish(({ retire: t('好，已停用。'), keep: t('好，留着。'), fix: t('好，这就改。'), later: t('好，先不动。'), continue: t('好，接着做。'), drop: t('好，这件不做了。'), accept: t('好，已经排上了。'), decline: t('好，不排。') } as Record<string, string>)[choice])
+    finish(({ retire: t('好，已停用。'), keep: t('好，留着。'), fix: t('好，这就改。'), later: t('好，先不动。'), continue: t('好，接着做。'), drop: t('好，这件不做了。'), accept: t('好，已经排上了。'), decline: t('好，不排。'), pause: t('好，已暂停。') } as Record<string, string>)[choice])
     try {
       await mindApi.invitation(sessionId, invitation.id, { action: 'answer', choice })
       // A background task settled here: the task page and the 去核对 / 重试请求 notice read the actions snapshot (C2-d).
@@ -238,6 +238,17 @@ export function NudgeStrip({ sessionId, typing }: { sessionId: string | null; ty
         <div className="flex shrink-0 flex-wrap items-center gap-1">
           <Button size="sm" variant="secondary" onClick={() => void decide('accept')}>{t('好，每天做')}</Button>
           <Button size="sm" variant="ghost" onClick={() => void decide('decline')}>{t('不用')}</Button>
+        </div>
+      </>
+    )
+  } else if (invitation?.kind === 'schedule_pause' && visible!.stage === 'ask') {
+    // The user's own schedule whose results nobody opened while they were away: only they can pause it, and "keep" is remembered.
+    body = (
+      <>
+        <span className="min-w-0 flex-1">{t('日程“{title}”最近 {count} 次的结果都没人看，要暂停吗？', { title: invitation.title ?? '', count: invitation.count ?? 0 })}</span>
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          <Button size="sm" variant="secondary" onClick={() => void decide('pause')}>{t('暂停')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => void decide('keep')}>{t('继续运行')}</Button>
         </div>
       </>
     )

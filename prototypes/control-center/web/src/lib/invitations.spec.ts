@@ -33,6 +33,15 @@ describe('status page lines', () => {
   })
 })
 
+describe('composer invitations: pausing a schedule nobody reads', () => {
+  it('is a decision the strip shows like the other asks: after feedback, task and lesson, with the schedule suggestion', () => {
+    const list = [row('p', 'schedule_pause', '2026-10-22T10:00:00Z'), row('l', 'lesson', '2026-10-22T10:00:05Z')]
+    expect(pickInvitation(list, open)?.id).toBe('l')
+    expect(pickInvitation(list.slice(0, 1), open)?.id).toBe('p')
+    expect(pickInvitation(list.slice(0, 1), { ...open, engaged: false })).toBeNull()
+  })
+})
+
 describe('composer invitations: a requested kind', () => {
   it('goes before the usual order when the user just asked to settle it', () => {
     const list = [row('f', 'feedback', '2026-10-01T10:00:05Z'), row('c', 'commitment', '2026-10-01T10:00:00Z')]
