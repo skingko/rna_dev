@@ -175,6 +175,7 @@ Headlong 只有一个时钟（调度器的 `wake_at`）；Rna 的后台决策有
 
 - 地板阶梯：协调器此刻做不了决策时（执行槽被后台工作占满、未确认的执行或外部复查、失败或持久化退避、行动历史已满），到期的地板唤醒不触发、保持待发，空出后的第一次 pump 再触发（Headlong `bin/thinkers:875-895`）。没有得出决策的唤醒（空转、忙、受阻）什么都不记，不动档位、计数和 `quietWakes`（`monolith_backoff.md:173、261-265`）；已经触发却因预算不够请求而没决策的地板唤醒，只按当前档位的间隔重新武装计时。
 - 档位：主模型的等待（`thought`）和 JEV 的推迟（`deferred`）都走完整阶梯，没有 `THOUGHT_CAP`（Headlong 的 thought 是廉价 tick，Rna 的是付费决策）；`quietWakes` 只计主模型的等待。
+- 休息（0.74.0，地板阶梯与 SDK 复查延迟之间的缝）：上一次决策是 `wait` 时，它的 `nextReviewAfterMs`（宿主按 `reviewMaxMs` 截断前的原值，至多一天）是模型自己说的“没有变化可以歇多久”。地板唤醒到期时，若没有新证据，且此刻要发的请求去掉 `clock` 与 `REST_IGNORE` 两个只随时间滑动的视图后，与那次等待时发出的请求哈希相同（`lastDecision.situation`，持久化），则不发请求：协调器返回 `unchanged_since_wait`，宿主记一条 `deferred` 唤醒（含 `saved`，没发出的请求的估计 token），地板计时器推到休息结束。只作用于地板唤醒；节奏通道（用户配置的复查间隔）和宿主强制放行的唤醒（`wakeBypass`：逾期请求、刚送达的交付）照旧；新证据、用户消息、请求里任何模型看得到的变化、休息结束都照常决策。依据与数字见 `docs/research/wake-rest-and-harness2-20261022.md`。
 - 逾期请求（`commitment_overdue` 规则）：不在前台轮次期间绕过；请求提出 14 天后不再按规则追（Headlong `PENDING_MAX_AGE`）；主模型看到逾期请求仍选择等待时，它写下的理由就是拒绝理由，记在 `mind.pacing.overdueDeclined`，同一证据 revision 下不再绕过，新证据到来后恢复。门控的 JEV 判断仍能在 `openWork` 里看到所有逾期请求。
 - 证据键只散列外部/实质证据：用户消息、完成的轮次、观察、完成的工作、日程、送达、失败。会话模式（计划模式开关）是运行时状态，不算证据（Headlong 把运行时变化记成下一次唤醒提示里的事实，不为它唤醒）；启动时把已消费的旧格式键迁移到新格式，升级本身不会被读成新证据。
 

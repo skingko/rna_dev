@@ -114,7 +114,7 @@ export const initiativeDecisionSchema = {
     evidenceIds: { type: 'array', description: 'Copy exact allowedEvidenceIds. Every non-wait action requires at least one; a receipt/message ID is not evidence.', maxItems: 50, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 160 } },
     content: { type: 'string', description: 'Required for every action. May be empty only for wait. For ask, give a non-empty introduction in addition to structured questions or permissionRequest.', maxLength: 8000 },
     title: { type: 'string', description: 'Required for work and share: the task in one short plain line for the user (what, not how), in their language. No tool names, IDs or handles.', maxLength: 120 },
-    nextReviewAfterMs: { type: 'integer', description: 'Required for every action, including work, learn, share and ask. Integer milliseconds; do not omit or return null.', minimum: 1000, maximum: 86400000 },
+    nextReviewAfterMs: { type: 'integer', description: 'Required for every action, including work, learn, share and ask. Integer milliseconds; do not omit or return null. For wait it is how long you can rest if nothing changes: the host does not ask you again about an unchanged situation before then, while new evidence, a user message or a scheduled run reaches you at once.', minimum: 1000, maximum: 86400000 },
     resolves: { type: 'array', description: 'Optional: ids of pending commitments or open agenda items (host project mind) that this action fulfils. The host settles them only after the action actually completes or is delivered.', maxItems: 8, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 160 } },
     questions: userQuestionsSchema.properties.questions,
     permissionRequest: { type: 'object', additionalProperties: false, required: ['workspace', 'background', 'reason'], properties: { workspace: { enum: ['write', 'execute'] }, background: { enum: ['read', 'inherit'] }, reason: { type: 'string', minLength: 1, maxLength: 2000 } } }
@@ -285,6 +285,23 @@ function notAdmitted(decision) {
   const reason = decision?.admission?.status === 'not_admitted' ? decision.admission.reason : null;
   if (!ADMISSION_MEANING[reason]) return null;
   return { action: decision.action, ...(decision.title ? { title: decision.title } : {}), content: String(decision.content ?? '').slice(0, 1200), admission: reason, meaning: ADMISSION_MEANING[reason] };
+}
+/**
+ * Rest on an unchanged situation. A `wait` states when it could next be worth asking again (nextReviewAfterMs, up to a
+ * day). The host clamps that to its review ceiling and a floor wake (the host's own backstop timer) asks anyway, so on a
+ * quiet project the same request, bar the clock, was paid for again and again to say the same wait: live 2026-10-22, one
+ * project whose user had been away five days, 43 floor wakes of ~70K uncached tokens each (3.0M) while its last wait
+ * itself said "next review in 15 hours". A floor wake that brings nothing new (no new evidence, the model sees exactly
+ * what it saw when it waited, apart from the clock and the host's rolling-window views named in `restIgnore`) keeps the
+ * model's own rest. New evidence, a changed request, a bypass the host forces (`unchangedRest: false`) or the end of the
+ * rest all ask as before, so nothing is discarded; the longest rest is the day a decision may ask for.
+ */
+export const MAX_REST_MS = 86400000;
+const REST_IGNORE_LIMIT = 16;
+function restIgnorePaths(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > REST_IGNORE_LIMIT || value.some(path => typeof path !== 'string' || !/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/.test(path) || path.length > 120)) throw new InitiativeError('restIgnore must be a short list of dotted project paths', 'invalid_policy');
+  return [...new Set(value)];
 }
 function splitContracts(actionContracts) {
   if (!actionContracts || typeof actionContracts !== 'object') return { contracts: actionContracts ?? null, conditions: null };
@@ -541,7 +558,7 @@ export function cacheAlignedReviewDue(state, policy, now, cacheWindowUntil) {
   return now - scheduledAt >= (policy?.reviewMinMs ?? Infinity) && due - now <= (due - scheduledAt) / 4;
 }
 export class InitiativeCoordinator {
-  constructor({ project = {}, model, apiKey, provider = streamCompletion, state, saveState = async () => {}, archiveHistory, handlers = {}, actionControlKinds = [], policy = {}, now = Date.now, onEvent = () => {}, redactValues = [], sharedPrefix, messageCheck, workCheck, decisionReasoning, schedulePromptVersion } = {}) {
+  constructor({ project = {}, model, apiKey, provider = streamCompletion, state, saveState = async () => {}, archiveHistory, handlers = {}, actionControlKinds = [], policy = {}, now = Date.now, onEvent = () => {}, redactValues = [], sharedPrefix, messageCheck, workCheck, decisionReasoning, schedulePromptVersion, restIgnore } = {}) {
     if (messageCheck !== undefined && typeof messageCheck !== 'function') throw new InitiativeError('messageCheck must be a host function', 'invalid_policy');
     // schedulePromptVersion: 'v1' | 'v2', or a host function returning it (read at every decision, so a changed setting
     // reaches the next request): which schedule guidance the decision prompt carries (initiative-schedule.mjs). Default v1.
@@ -554,6 +571,9 @@ export class InitiativeCoordinator {
     // about to be requested (internal reasoning, spec p1 effort §3.4). Anything else, or a throw, keeps model.reasoning.
     if (decisionReasoning !== undefined && typeof decisionReasoning !== 'function') throw new InitiativeError('decisionReasoning must be a host function', 'invalid_policy');
     this.decisionReasoning = decisionReasoning;
+    // restIgnore: dotted paths inside the project snapshot that only the clock changes (rolling-window views); the rest on an
+    // unchanged situation compares the request without them (see MAX_REST_MS).
+    this.restIgnore = restIgnorePaths(restIgnore);
     this.sharedPrefix = sharedPrefix; this.messageCheck = messageCheck; this.workCheck = workCheck; this.project = clone(project); this.model = model; this.apiKey = apiKey; this.provider = provider; this.saveState = saveState; this.handlers = { ...handlers }; this.now = now; this.onEvent = onEvent;
     // The previous decision request's text, kept in memory only, for the prefix diagnostic of the next one.
     this.lastPrompt = null;
@@ -870,7 +890,7 @@ export class InitiativeCoordinator {
     const executionBlocked = this._executionBlocked();
     const reviewKey = executionBlocked ? createHash('sha256').update(JSON.stringify(this.state.actions.filter(blocksExecution).map(action => action.id).sort())).digest('hex') : null;
     const changed = this.state.decisionRevision !== this.state.revision || Boolean(this.state.pendingFailureReview) || reviewKey !== (this.state.externalReviewBarrier?.key ?? null);
-    const gate = wait => ({ wait, executionBlocked, reviewKey });
+    const gate = wait => ({ wait, executionBlocked, reviewKey, changed });
     // A timer cannot resolve an unknown side effect. Permit one decision to
     // communicate each changed situation, then await actual evidence or an
     // explicit outcome confirmation. Delivery still drains before this gate.
@@ -887,6 +907,23 @@ export class InitiativeCoordinator {
     return gate(null);
   }
   /**
+   * The request a decision now would send, without what only the clock changes, as a hash and its size: the situation a
+   * wait was made in (MAX_REST_MS). The clock and the host's `restIgnore` views are left out of the project; the rest of
+   * the request (system prompt, contracts, events, receipts, presence, policy) is exactly what the model reads.
+   */
+  _situation({ events, availableActions, promptActions, presence, recentActions, previousDecision, scheduleVersion }) {
+    const project = clone(this.project); delete project.clock; for (const path of this.restIgnore) takePath(project, path);
+    const prompt = decisionPrompt(this.project, promptActions, scheduleVersion), text = requestText({ project, events, availableActions, presence, policy: this.policy, recentActions, previousDecision });
+    return { key: createHash('sha256').update(prompt).update('\0').update(text).digest('hex').slice(0, 32), bytes: Buffer.byteLength(prompt) + Buffer.byteLength(text) };
+  }
+  /** The instant the last wait's own rest ends, when it was made in this very situation and nothing new has arrived; else null. */
+  _restUntil(situation, changed) {
+    const last = this.state.lastDecision;
+    if (changed || last?.action !== 'wait' || last.situation !== situation || !Number.isFinite(last.at) || !Number.isFinite(last.nextReviewAfterMs)) return null;
+    const until = last.at + Math.min(last.nextReviewAfterMs, MAX_REST_MS);
+    return this.now() < until ? until : null;
+  }
+  /**
    * Whether a tick with these options would go on to request a decision now: the same gates tick applies after draining
    * (paused, persistence or failure backoff, an awaited external review or action result, the review interval, no
    * evidence, no configured model, a full action history), read without side effects. Only the request-size budget check
@@ -899,8 +936,9 @@ export class InitiativeCoordinator {
     if (this._decisionGate({ cacheWindowUntil, wakeFloor }).wait || !configured(this.model)) return false;
     return !(this.state.actions.filter(action => ['queued', 'running', 'paused', 'needs_review'].includes(action.status)).length >= this.policy.maxPendingActions || this.archiveHistory && this.state.actions.length >= this.policy.maxHistory + this.policy.maxPendingActions);
   }
-  async tick({ presence = {}, signal, decisionEnabled = true, cacheWindowUntil, wakeFloor = false } = {}) {
+  async tick({ presence = {}, signal, decisionEnabled = true, cacheWindowUntil, wakeFloor = false, unchangedRest = true } = {}) {
     if (typeof decisionEnabled !== 'boolean') throw new InitiativeError('decisionEnabled must be boolean', 'invalid_policy');
+    if (typeof unchangedRest !== 'boolean') throw new InitiativeError('unchangedRest must be boolean', 'invalid_policy');
     if (this.closed) throw new InitiativeError('Initiative coordinator is closed', 'closed');
     signal = signal ? AbortSignal.any([signal, this.lifecycleAbort.signal]) : this.lifecycleAbort.signal;
     signal.throwIfAborted(); if (!this.policy.enabled) return { status: 'paused' }; if (this.ticking) return { status: 'busy' };
@@ -918,7 +956,7 @@ export class InitiativeCoordinator {
       // actual wake can still review it later. This is not a persisted pause.
       if (!decisionEnabled) return { status: 'idle', reason: 'decision_disabled', running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length };
       if (this.now() < (this.state.failureRetryAt ?? 0)) return { status: 'idle', reason: 'failure_backoff' };
-      const { wait, executionBlocked, reviewKey } = this._decisionGate({ cacheWindowUntil, wakeFloor });
+      const { wait, executionBlocked, reviewKey, changed } = this._decisionGate({ cacheWindowUntil, wakeFloor });
       if (wait === 'no_evidence') return { status: 'idle', reason: 'no_evidence' };
       if (wait) return { status: 'idle', ...(wait === 'not_due' ? {} : { reason: wait }), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length };
       if (!configured(this.model)) return { status: 'blocked', reason: 'configured_model_required' };
@@ -943,6 +981,10 @@ export class InitiativeCoordinator {
       const previousDecision = notAdmitted(this.state.lastDecision);
       // Conservative UTF-8 bound plus framing/output budget; usage is reconciled when reported.
       const scheduleVersion = typeof this.schedulePromptVersion === 'function' ? this.schedulePromptVersion() : this.schedulePromptVersion;
+      // A host floor wake that brings nothing new keeps the rest the last wait asked for (MAX_REST_MS): nothing is sent, charged or persisted.
+      const situation = this._situation({ events, availableActions, promptActions, presence, recentActions, previousDecision, scheduleVersion });
+      const restUntil = unchangedRest && wakeFloor ? this._restUntil(situation.key, changed) : null;
+      if (restUntil !== null) return { status: 'idle', reason: 'unchanged_since_wait', restUntil, savedTokens: Math.ceil(situation.bytes / 3), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length };
       const reserve = Buffer.byteLength(decisionPrompt(this.project, promptActions, scheduleVersion) + requestText({ project: this.project, events, availableActions, presence, policy: this.policy, recentActions, previousDecision })) + this.policy.decisionMaxTokens + 512;
       if (reserve > this._remaining()) return { status: 'blocked', reason: 'budget_exhausted', remainingTokens: this._remaining() };
       this.state.reservedTokens += reserve;
@@ -1039,7 +1081,7 @@ export class InitiativeCoordinator {
           admission = { status: 'not_admitted', reason: duplicate ? 'exact_duplicate' : 'already_covered', at: this.now(), ...(covered?.ledgerId ? { ledgerId: covered.ledgerId } : {}) };
         }
       }
-      this.state.lastDecision = { ...outcome.decision, revision, at: this.now(), ...(admission ? { admission } : {}), ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract), timeoutPolicy: clone(outcome.timeoutPolicy) }; await this._persist();
+      this.state.lastDecision = { ...outcome.decision, revision, at: this.now(), situation: situation.key, ...(admission ? { admission } : {}), ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract), timeoutPolicy: clone(outcome.timeoutPolicy) }; await this._persist();
       this._emit({ type: 'initiative_decision', decision: outcome.decision, ...(admission ? { admission: clone(admission) } : {}), usage: outcome.usage, ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract) }); await this._drain(presence, signal);
       return { status: 'decided', decision: outcome.decision, admitted: admission === null, ...(admission ? { admission: clone(admission) } : {}), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length, usage: spent, attempts: outcome.attempts, ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), ...(outcome.prompt ? { prompt: outcome.prompt } : {}) };
     } finally { this.decisionAbort = null; this.ticking = false; tickFinished(); }

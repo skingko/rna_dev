@@ -17,6 +17,8 @@
 // - conditions: hostActionContracts with hostConditions put back (withConditions, what validation reads) equal the
 //   snapshot's contracts; allowedEvidenceIds is the event set; every turn reference names a sent event; schedules sit at
 //   project.schedules and scheduleContext keeps `cancelled`.
+// - rest (0.74.0, SDK MAX_REST_MS): after a wait that asked for an hour's rest, a floor wake 30 minutes later (only the clock moved) sends
+//   nothing and says `unchanged_since_wait`; one 90 minutes later asks. Skipped (null) on a revision without the rule.
 // Usage: node benchmark/initiative-request-size.mjs <code root, e.g. an exported checkout> <state.json copy>
 // Run it once per revision (e.g. `git archive <rev> | tar -x -C dir`) and compare. Never point it at production state:
 // readStateFile only reads, but pass a copy.
@@ -35,7 +37,7 @@ const { mindBackgroundView } = await import(`${cc}/project-mind.mjs`);
 const sdkModule = await import(`${sdk}/initiative.mjs`);
 const { InitiativeCoordinator } = sdkModule;
 const { state } = readStateFile(statePath);
-const now = Date.parse('2026-10-04T13:00:00Z');
+let now = Date.parse('2026-10-04T13:00:00Z');
 // The worker's project-mind attachment (ProjectMind.backgroundContext without its recall accounting).
 const mind = { backgroundContext: (projectId, { query = '' } = {}) => { const view = mindBackgroundView(state.projects.find(row => row.id === projectId), { now, query }); return view ? JSON.stringify(view) : null; } };
 const store = { state, file: null, usageLedger: null, configurationService: { secrets: {}, secretValues: () => [] }, presences: new Map(), mind };
@@ -72,7 +74,7 @@ for (const project of state.projects.filter(row => !row.archivedAt && row.initia
   const provider = async function* (request) { captured = request; yield { type: 'text_delta', delta: JSON.stringify({ action: 'wait', reason: 'measure', content: '', evidenceIds: [], nextReviewAfterMs: 3600000 }) }; yield { type: 'usage', usage: { totalTokens: 1 } }; yield { type: 'done', stopReason: 'stop' }; };
   const idle = async () => ({ deferred: true, retryAfterMs: 1e9, usage: { totalTokens: 0 } });
   const coordinator = new InitiativeCoordinator({ project: {}, model: { providerId: 'measure', modelId: 'glm-5.3', protocol: 'openai', baseUrl: 'https://measure.invalid/v1', maxOutputTokens: 32000, contextWindow: 200000 }, apiKey: 'measure', provider, state: sdkState, saveState: async () => {}, now: () => now,
-    policy: { ...project.initiative, tokenBudget: null, decisionAttempts: 1, maxConcurrent: 1, maxEvents: 16, eventBlock, decisionMaxTokens: 32000 }, handlers: { work: idle, share: idle, ask: idle, schedule: idle } });
+    restIgnore: controllerModule.REST_IGNORE ? [...controllerModule.REST_IGNORE] : undefined, policy: { ...project.initiative, tokenBudget: null, decisionAttempts: 1, maxConcurrent: 1, maxEvents: 16, eventBlock, decisionMaxTokens: 32000 }, handlers: { work: idle, share: idle, ask: idle, schedule: idle } });
   const snapshotNow = () => { live.initiativeRuntime.sdkState = coordinator.snapshot(); return hasNew ? controller.snapshot(live, null, null, { eventIds: eventIdsOf(coordinator.state.events), liveActions: coordinator.state.actions }) : controller.snapshot(live, null, null); };
   const render = async () => { coordinator.project = snapshotNow(); coordinator.state.decisionRevision = -1; captured = null; const outcome = await coordinator.tick({ presence: { conversationAvailable: true }, decisionEnabled: true }); return { status: outcome.status, project: coordinator.project, events: structuredClone(coordinator.state.events), system: captured?.systemPrompt ?? '', text: captured?.messages?.[0]?.content?.[0]?.text ?? '' }; };
   const work = [...sdkState.actions].reverse().find(action => action.action === 'work');
@@ -114,11 +116,18 @@ for (const project of state.projects.filter(row => !row.archivedAt && row.initia
   const conditions = { contractsRestored: contracts && expected ? isDeepStrictEqual(contracts, expected) : null, allowedEvidenceIds: JSON.stringify(parsed.allowedEvidenceIds) === JSON.stringify(parsed.events.map(event => event.id)), turnReferences: references.length, referencesResolve: references.every(id => aliases.has(id)),
     schedules: Array.isArray(parsed.project?.schedules) || !base.project.scheduleContext, cancelled: !base.project.scheduleContext || Array.isArray(parsed.project?.scheduleContext?.cancelled) };
   conditions.ok = conditions.contractsRestored !== false && conditions.allowedEvidenceIds && conditions.referencesResolve && conditions.schedules && conditions.cancelled;
+  // The rest: a wait that asked for an hour, then floor wakes at +30 minutes (only the clock moved) and +90 minutes (the rest is over).
+  let rest = null;
+  if (typeof coordinator._restUntil === 'function') {
+    const asked = await render(), at = now, floorTick = async delta => { now = at + delta; coordinator.project = snapshotNow(); captured = null; const outcome = await coordinator.tick({ presence: { conversationAvailable: true }, decisionEnabled: true, wakeFloor: true }); return { status: outcome.status, reason: outcome.reason ?? null, saved: outcome.savedTokens ?? null, sent: captured !== null }; };
+    const early = await floorTick(30 * 60000), late = await floorTick(90 * 60000); now = at;
+    rest = { asked: asked.status, early, late, ok: asked.status === 'decided' && early.reason === 'unchanged_since_wait' && !early.sent && late.status === 'decided' && late.sent };
+  }
   const part = value => value === undefined ? 0 : bytes(JSON.stringify(value));
   results.push({ project: project.name, status: base.status, systemBytes: bytes(base.system), requestBytes: bytes(base.text), events: parsed.events.length,
     windows: { recentActions: parsed.recentActions.length, events: parsed.events.length, actionReceipts: parsed.project?.continuity?.actionReceipts?.length ?? 0, recentTurns: parsed.project?.continuity?.recentTurns?.length ?? 0, recentConversation: parsed.project?.recentConversation?.length ?? 0 },
     parts: { hostActionContracts: part(parsed.hostActionContracts), project: part(parsed.project), continuity: part(parsed.project?.continuity), recentConversation: part(parsed.project?.recentConversation), communication: part(parsed.project?.communication), schedules: part(parsed.project?.schedules) + part(parsed.project?.scheduleContext), handoffs: part(parsed.project?.handoffs), recentActions: part(parsed.recentActions), events: part(parsed.events), hostConditions: part(parsed.hostConditions) },
     worker: { ...(baseWorker.brief ? { briefBytes: bytes(baseWorker.brief) } : {}), attachmentBytes: bytes(baseWorker.attachment) },
-    checks: { planMode: flipCheck(plan), foregroundBusy: flipCheck(busy), newAction, newEvent, conditions } });
+    checks: { planMode: flipCheck(plan), foregroundBusy: flipCheck(busy), newAction, newEvent, conditions, rest } });
 }
 console.log(JSON.stringify(results, null, 2));

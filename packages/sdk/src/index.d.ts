@@ -628,7 +628,7 @@ export interface InitiativeFailure {
 export interface InitiativeState {
   schemaVersion: 1; revision: number; events: Observation[]; seenEventIds: string[]; actions: InitiativeAction[];
   decisionRevision: number; nextReviewAt: number; lastSharedAt: number | null; usedTokens: number; reservedTokens: number;
-  idleCount?: number; failureCount?: number; failureRetryAt?: number; estimatedTokens?: number; policy?: InitiativePolicy; lastDecision?: InitiativeDecision & { revision: number; at: number; admission?: InitiativeAdmission; responseContract?: JsonOutputContract; timeoutPolicy?: CompletionTimeoutPolicy };
+  idleCount?: number; failureCount?: number; failureRetryAt?: number; estimatedTokens?: number; policy?: InitiativePolicy; lastDecision?: InitiativeDecision & { revision: number; at: number; situation?: string; admission?: InitiativeAdmission; responseContract?: JsonOutputContract; timeoutPolicy?: CompletionTimeoutPolicy };
   reviewSchedule?: { at: number; requested: number; count: number };
   externalReviewBarrier?: { revision: number; key: string };
   pendingFailureReview?: { actionId: string; evidenceKey: string }; lastFailureReviewEvidenceKey?: string; externalEvidenceKey?: string;
@@ -679,6 +679,8 @@ export type InitiativeHandler = (action: InitiativeAction, context: {
 export type InitiativeTickResult =
   | { status: 'paused' | 'busy' }
   | { status: 'idle'; reason?: string; running?: number; deferred?: number }
+  /** A floor wake that kept the last wait's own rest: `restUntil` is when it ends (ms), `savedTokens` the request that was not sent (estimated). */
+  | { status: 'idle'; reason: 'unchanged_since_wait'; restUntil: number; savedTokens: number; running?: number; deferred?: number }
   | (BlockedResult & { remainingTokens?: number })
   /** usage: what the superseded decision was charged (zero when it was superseded before it was sent). */
   | { status: 'stale'; reason: 'new_evidence' | 'interrupted'; usage?: InitiativeDecisionUsage }
@@ -689,6 +691,8 @@ export interface InitiativeAdmission { status: 'not_admitted'; reason: 'exact_du
 /** Which actions a decision carries as recentActions (the host projection uses the same predicate), and how many. */
 export function receiptEligible(action: { status?: string; contextRevoked?: boolean }): boolean;
 export const RECENT_RECEIPTS: number;
+/** The longest rest on an unchanged situation: the day a decision may ask for. */
+export const MAX_REST_MS: number;
 /** The newest `size` rows, the window's start moving only every `block` rows (it holds size to size + block - 1 rows); block 1 is a plain tail. */
 export function blockWindow<T>(rows: readonly T[], size: number, block?: number): T[];
 /** An idle periodic review may run early inside the prompt-cache window: last quarter of its planned wait, past reviewMinMs, never later. */
@@ -702,7 +706,9 @@ export class InitiativeCoordinator {
     /** The host's effort for the decision about to be requested, given the exact request data; anything invalid (or a throw) keeps model.reasoning. New evidence or a stop during it ends the tick stale at no charge. */
     decisionReasoning?: (input: { project: ProjectContext; events: Observation[]; availableActions: InitiativeActionKind[]; promptActions: InitiativeActionKind[]; recentActions: unknown[]; previousDecision: unknown; presence: Partial<Presence>; policy: Partial<InitiativePolicy>; lastDecision: { at: number; action: InitiativeActionKind; evidenceIds: string[] } | null; failureReview: boolean; signal: AbortSignal }) => MaybePromise<{ reasoning: Reasoning; record?: Record<string, unknown> } | undefined | void>;
     /** Which schedule guidance the decision prompt carries, or a host function returning it (read at every decision). Default 'v1'. */
-    schedulePromptVersion?: SchedulePromptVersion | (() => SchedulePromptVersion | undefined) });
+    schedulePromptVersion?: SchedulePromptVersion | (() => SchedulePromptVersion | undefined);
+    /** Dotted project paths that only the clock changes (rolling-window views). The rest on an unchanged situation compares the request without them and without `clock`. */
+    restIgnore?: string[] });
   snapshot(): InitiativeState;
   /** Invalidates only the in-flight judgment. Running actions retain their own lifetime. */
   invalidateDecision(reason?: string): void;
@@ -718,7 +724,8 @@ export class InitiativeCoordinator {
   updatePolicy(patch: Pick<InitiativePolicy, 'enabled' | 'notificationMuted' | 'deferWhileTyping' | 'cooldownMs' | 'tokenBudget' | 'workBudgetTokens' | 'learnBudgetTokens' | 'learnNotBefore' | 'maxConcurrent' | 'reviewMinMs' | 'reviewMaxMs'>): Promise<Required<InitiativePolicy>>;
   /** decisionEnabled:false drains already admitted actions but skips new model decisions; it never changes persisted user enablement. */
   /** cacheWindowUntil: end (ms) of the provider cache TTL of the last same-prefix request; see cacheAlignedReviewDue. */
-  tick(options?: { presence?: Presence; signal?: AbortSignal; decisionEnabled?: boolean; cacheWindowUntil?: number; wakeFloor?: boolean }): Promise<InitiativeTickResult>;
+  /** wakeFloor wakes (the host's backstop timer) keep the rest the last `wait` asked for while nothing new arrived and the request is unchanged apart from the clock (result `unchanged_since_wait`, nothing sent or charged); `unchangedRest: false` asks anyway (a bypass the host forces). */
+  tick(options?: { presence?: Presence; signal?: AbortSignal; decisionEnabled?: boolean; cacheWindowUntil?: number; wakeFloor?: boolean; unchangedRest?: boolean }): Promise<InitiativeTickResult>;
   /** Whether a tick with these options would request a decision now (every gate tick applies after draining except the request-size budget check), without side effects. Ask a judge about a review only when it is true. */
   decisionDue(options?: { cacheWindowUntil?: number; wakeFloor?: boolean }): boolean;
   interrupt(reason?: string, options?: { cancelQueued?: boolean }): void;

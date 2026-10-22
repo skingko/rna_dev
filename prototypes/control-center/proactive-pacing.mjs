@@ -350,9 +350,10 @@ export function wakeFloor(project, rhythm, { now = Date.now() } = {}) {
  * re-arms at the level's delay (bounded: the floor only runs with open work). The ladder moves when the action's
  * outcome does (applyWorkOutcome, from the work-outcome.mjs transitions): visible resets it; nothing visible, an undo or
  * a failure steps it down.
+ * `saved`: on a 'deferred' wake that rested on the last wait's own rest (reason `unchanged_since_wait`), the request it did not send.
  * `tier`, `gate`: what a row also records (wakeTier: the shadow tier; the judgment rows the wake came from).
  */
-export function advanceWake(wake = {}, outcome, { now = Date.now(), tokens = null, latencyMs = null, floor = false, reason = null, prompt = null, reasoning = null, actionId = null, tier = null, gate = null } = {}) {
+export function advanceWake(wake = {}, outcome, { now = Date.now(), tokens = null, latencyMs = null, floor = false, reason = null, prompt = null, reasoning = null, actionId = null, tier = null, gate = null, saved = null } = {}) {
   let level = wake.level ?? 0, ticks = wake.ticksAtLevel ?? 0, quietWakes = wake.quietWakes ?? 0;
   // The decision's reasoning effort (internal reasoning): what it ran at and where that came from.
   const effort = reasoning && typeof reasoning === 'object' && typeof reasoning.effective === 'string' ? { reasoning: { effective: reasoning.effective.slice(0, 20), source: typeof reasoning.source === 'string' ? reasoning.source.slice(0, 30) : 'configured', ...(reasoning.shadow?.effort ? { shadow: String(reasoning.shadow.effort).slice(0, 20) } : {}) } } : {};
@@ -361,6 +362,8 @@ export function advanceWake(wake = {}, outcome, { now = Date.now(), tokens = nul
   const extra = {
     ...(tier && WAKE_TIERS.includes(tier.tier) ? { tier: tier.tier, ...(Array.isArray(tier.facts) && tier.facts.length ? { tierFacts: tier.facts.filter(fact => typeof fact === 'string').map(fact => fact.slice(0, 30)).slice(0, 8) } : {}) } : {}),
     ...(typeof actionId === 'string' && actionId ? { actionId: actionId.slice(0, 160) } : {}),
+    // A deferred wake that kept the rest its last wait asked for: the decision request it did not send, in estimated tokens (`saved`).
+    ...(Number.isFinite(saved) && saved > 0 ? { saved: Math.round(saved) } : {}),
     ...(gate && (typeof gate.ledgerId === 'string' || gate.deferred?.length) ? { gate: { ...(typeof gate.ledgerId === 'string' ? { ledgerId: gate.ledgerId } : {}), ...(Array.isArray(gate.deferred) && gate.deferred.length ? { deferred: gate.deferred.filter(id => typeof id === 'string').slice(0, 8) } : {}) } } : {}),
   };
   // A decision superseded by new evidence or a stop (its tokens are spent) is history only: it never moves the ladder,

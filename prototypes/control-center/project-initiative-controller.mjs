@@ -101,6 +101,13 @@ const terminalSourceId = (project, turn) => {
 // continuity change with every user turn, so they follow the project description, version and policies. The user's
 // undos (workspaceEvents) change only when the user undoes something, so they come before the conversation.
 const VOLATILE_SNAPSHOT_KEYS = ['learningStatus', 'pendingJobs', 'schedules', 'scheduleContext', 'workspaceEvents', 'recentConversation', 'continuity', 'handoffs', 'mind', 'communication', 'rhythmStatus', 'clock'];
+/**
+ * Views of the decision snapshot that only the clock moves: the rolling 24-hour digest of what was sent (a message leaves the
+ * window, a reaction settles from pending to ignored with time) and the rolling review quota of the evolution lane. They are
+ * left out when a floor wake asks whether the situation is the one its last wait was made in (SDK MAX_REST_MS); every other
+ * part of the request, the conversation, the receipts and the evidence included, still counts.
+ */
+export const REST_IGNORE = Object.freeze(['communication.sentLast24h', 'rhythmStatus.evolution.quota']);
 /** A valid judgment plan is offered back to the main model for revision this often; between revisits a wake carries no plan authoring. */
 export const JUDGMENT_PLAN_REVISIT_MS = 7 * 86400000;
 function cacheOrdered(snapshot) {
@@ -358,6 +365,8 @@ const HISTORY_SCOPE = 'Current project, non-archived conversations and retained 
  * count as a thought, so a long background run alone moved the ladder down and raised the quiet count.
  */
 export function wakeOutcome(result) {
+  // A floor wake that kept the rest its last wait asked for (SDK MAX_REST_MS): settled without the model, like a judged deferral.
+  if (result?.status === 'idle' && result.reason === 'unchanged_since_wait') return { outcome: 'deferred', reason: 'unchanged_since_wait', saved: Number.isFinite(result.savedTokens) ? result.savedTokens : 0 };
   if (result?.status === 'judgment_deferred') return { outcome: 'deferred', reason: result.reason ?? 'judged_idle' };
   // A paid decision that new evidence or a stop superseded: recorded (with its tokens), never moving the ladder.
   if (result?.status === 'stale' && Number(result.usage?.totalTokens) > 0) return { outcome: 'interrupted', reason: result.reason ?? 'interrupted' };
@@ -1479,6 +1488,7 @@ export class ProjectInitiativeController {
       // the validation message, instead of failing the wake and paying for a whole new decision at the next one.
       policy: { ...project.initiative, decisionAttempts: 2, tokenBudget: remainingInitiativeTokenBudget(project), workBudgetTokens: 12000, learnBudgetTokens: this.learnReservation(project, model), learnNotBefore: autonomousLearningNotBefore(project), decisionMaxTokens: model.maxOutputTokens, maxConcurrent: 1, maxEvents: 16, eventBlock: WINDOW_BLOCK, reviewMinMs: project.initiative.reviewMinMs ?? PROJECT_SCHEDULE_DEFAULTS.reviewMinMs, reviewMaxMs: project.initiative.reviewMaxMs ?? PROJECT_SCHEDULE_DEFAULTS.reviewMaxMs, reviewJitterRatio: 0.1, decisionTimeoutMs: this.decisionTimeoutMs, actionTimeoutMs: this.actionTimeoutMs },
       actionControlKinds: ['work'],
+      restIgnore: [...REST_IGNORE],
       // Host-side writing-contract check with one SDK repair round: leaked
       // identifiers/paths, status pings and near-repeats of the last 24h.
       messageCheck: decision => { const current = this.project(context.projectId); return current ? checkedMessageViolations(current, this.store.state.sessions.filter(session => session.projectId === current.id && !session.archivedAt && session.kind !== 'side'), decision.content, { now: this.now(), decisions: this.decisions }) : []; },
@@ -1944,7 +1954,8 @@ export class ProjectInitiativeController {
           }
           // C2: which action this decision admitted is read from what the tick added to the coordinator's actions.
           actionsBefore = new Set(context.coordinator.state.actions.map(row => row.id)); context.wakeTier = null;
-          const result = await context.coordinator.tick({ presence: this.presence(this.project(project.id)), decisionEnabled: wakeEligible, cacheWindowUntil, wakeFloor: floor.eligible });
+          // A wake the host forces to the main model past the judge (wakeBypass: an overdue request, a delivery just completed) is never rested.
+          const result = await context.coordinator.tick({ presence: this.presence(this.project(project.id)), decisionEnabled: wakeEligible, cacheWindowUntil, wakeFloor: floor.eligible, unchangedRest: !context.wakeBypass });
           if (gate?.review === true && !['decided', 'stale'].includes(result.status)) context.gateWake = { situation, gate, until: Number.isFinite(gate.retryAt) ? gate.retryAt : this.now() + GATE_WAKE_RETRY_MS };
           else if (['decided', 'stale'].includes(result.status)) context.gateWake = null;
           return result;
@@ -1961,10 +1972,12 @@ export class ProjectInitiativeController {
           // rows the wake came from, so its outcome later finds the wake that decided it and labels those rows.
           const admitted = wake?.outcome === 'work' && actionsBefore ? context.coordinator.state.actions.findLast(row => !actionsBefore.has(row.id) && !row.hostSchedule && row.action === result.decision?.action) ?? null : null;
           const judged = gateOutcome && (gateOutcome.result?.ledgerId || gateOutcome.deferredLedgerIds?.length) ? { ledgerId: gateOutcome.result?.ledgerId, deferred: gateOutcome.deferredLedgerIds } : null;
-          if (wake) this.recordWake(context, wake.outcome, { startedAt: reviewStartedAt, tokensBefore, floor: floor.eligible, ...(wake.reason ? { reason: wake.reason } : {}), ...(wake.outcome !== 'deferred' ? { prompt: result.prompt ?? null } : {}), ...(Number.isFinite(result.usage?.totalTokens) ? { tokens: result.usage.totalTokens } : {}), ...(wake.outcome === 'deferred' ? {} : { reasoning: this.decisionEffortNow(context, result.reasoning ?? context.decisionEffort) }), ...(declined ? { declined } : {}),
+          if (wake) this.recordWake(context, wake.outcome, { startedAt: reviewStartedAt, tokensBefore, floor: floor.eligible, ...(wake.reason ? { reason: wake.reason } : {}), ...(wake.saved ? { saved: wake.saved } : {}), ...(wake.outcome !== 'deferred' ? { prompt: result.prompt ?? null } : {}), ...(Number.isFinite(result.usage?.totalTokens) ? { tokens: result.usage.totalTokens } : {}), ...(wake.outcome === 'deferred' ? {} : { reasoning: this.decisionEffortNow(context, result.reasoning ?? context.decisionEffort) }), ...(declined ? { declined } : {}),
             ...(wake.outcome === 'deferred' ? {} : { tier: context.wakeTier ?? null }), ...(admitted ? { actionId: admitted.id } : {}), ...(admitted && judged ? { gate: judged } : {}) });
           // PDL-4: a floor wake that fired and still reached no decision re-arms at its level's delay; the ladder stays put.
           else if (floor.eligible && result.status !== 'stale') this.rearmFloor(context);
+          // The floor's timer waits for the end of the rest the last wait asked for, not for the ladder's next rung.
+          if (wake?.reason === 'unchanged_since_wait') this.restFloor(context, result.restUntil);
           this.settleDecisionEffort(context, result.status === 'decided' ? { status: 'decided', action: result.decision?.action, admitted: result.admitted !== false, attempts: result.attempts ?? null, messageRepairs: result.messageRepairs ?? 0, reasoning: result.reasoning, usage: result.usage, latencyMs: this.now() - reviewStartedAt } : result.status === 'stale' ? { status: 'stale', reason: result.reason ?? null, usage: result.usage ?? null } : null);
           // What the main model decided labels the wake judgment (and any deferral it followed) for calibration; a
           // decision that was not admitted changed nothing, so it labels like a wait.
@@ -2123,12 +2136,12 @@ export class ProjectInitiativeController {
    * `gate`: the action a work-like decision admitted and the judgment rows it came from.
    * The row goes to the wake log (`<state>.rna/metrics/wakes.jsonl`); state keeps only the newest WAKE_STATE_TAIL.
    */
-  recordWake(context, outcome, { startedAt, tokensBefore = 0, floor = false, reason, prompt = null, tokens = null, reasoning = null, declined = null, tier = null, actionId = null, gate = null } = {}) {
+  recordWake(context, outcome, { startedAt, tokensBefore = 0, floor = false, reason, prompt = null, tokens = null, reasoning = null, declined = null, tier = null, actionId = null, gate = null, saved = null } = {}) {
     if (!this.valid(context)) return;
     try { this.mutate(state => {
       const target = state.projects.find(row => row.id === context.projectId); if (!target) return;
       const mind = ensureMind(target), used = target.initiativeRuntime?.sdkState?.usedTokens ?? tokensBefore;
-      mind.pacing.wake = advanceWake(mind.pacing.wake, outcome, { now: this.now(), tokens: Number.isFinite(tokens) ? Math.max(0, tokens) : Math.max(0, used - tokensBefore), latencyMs: Number.isFinite(startedAt) ? this.now() - startedAt : null, floor, reason, prompt, reasoning: reasoning?.effective ? reasoning : null, tier, actionId, gate });
+      mind.pacing.wake = advanceWake(mind.pacing.wake, outcome, { now: this.now(), tokens: Number.isFinite(tokens) ? Math.max(0, tokens) : Math.max(0, used - tokensBefore), latencyMs: Number.isFinite(startedAt) ? this.now() - startedAt : null, floor, reason, prompt, reasoning: reasoning?.effective ? reasoning : null, tier, actionId, gate, saved });
       if (declined) mind.pacing.overdueDeclined = declined;
       // The row is in the wake log (a file, appended) before state forgets any row past its tail; a start imports whatever
       // a failed append left (WakeLog.absorb).
@@ -2165,6 +2178,11 @@ export class ProjectInitiativeController {
       memo.set(id, key);
       for (const label of outcomeLabels(record, wake)) try { this.decisions?.labelOutcome?.(label.id, label.value); } catch { /* labels never block a review */ }
     }
+  }
+  /** A floor wake rested on the last wait's own rest (SDK MAX_REST_MS): the floor's next wake is the end of that rest, never earlier than the ladder's timer. */
+  restFloor(context, restUntil) {
+    if (!this.valid(context) || !Number.isFinite(restUntil)) return;
+    try { this.mutate(state => { const target = state.projects.find(row => row.id === context.projectId); if (!target) return; const wake = ensureMind(target).pacing.wake, current = Date.parse(wake.nextAt); if (Number.isFinite(current) && restUntil <= current) return; wake.nextAt = new Date(restUntil).toISOString(); }); } catch { /* pacing bookkeeping never blocks a review */ }
   }
   /** PDL-4: re-arm the floor's timer after a floor wake that reached no decision; level, ticks and quiet count stay put. */
   rearmFloor(context) {

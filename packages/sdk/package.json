@@ -1,6 +1,6 @@
 {
   "name": "@rna-agent/sdk",
-  "version": "0.59.0",
+  "version": "0.60.0",
   "license": "Apache-2.0",
   "type": "module",
   "description": "Rna Agent's independent provider, session, capability, project and initiative runtime",

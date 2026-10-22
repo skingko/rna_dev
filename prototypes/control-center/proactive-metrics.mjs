@@ -25,7 +25,7 @@ export function wakeCell(projectId, row) {
   return { at: at(row.at), key: { projectId, outcome, ...(['failed', 'deferred'].includes(outcome) && text(row.reason, 80) ? { reason: text(row.reason, 80) } : {}), ...(text(row.reasoning?.effective, 20) ? { effective: text(row.reasoning.effective, 20) } : {}), ...(text(row.reasoning?.shadow, 20) ? { shadow: text(row.reasoning.shadow, 20) } : {}),
       // C2: the tier the wake would run on (wakeTier: request | think), recorded in shadow; a row from before it has none.
       ...(text(row.tier, 12) ? { tier: text(row.tier, 12) } : {}) },
-    values: { wakes: 1, ...(tokens !== null ? { tokens, tokensN: 1 } : {}), ...(latency !== null ? { latencyMs: latency, latencyN: 1 } : {}), ...prompt } };
+    values: { wakes: 1, ...(tokens !== null ? { tokens, tokensN: 1 } : {}), ...(Number.isFinite(row.saved) && row.saved > 0 ? { saved: row.saved } : {}), ...(latency !== null ? { latencyMs: latency, latencyN: 1 } : {}), ...prompt } };
 }
 const HISTORY_KEPT = 50;
 /**

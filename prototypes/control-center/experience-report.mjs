@@ -165,7 +165,7 @@ export function experienceReport(state, { now = Date.now(), days = 7, archived =
     // `deferred`: the wake judgment (a rule or JEV) settled the wake without the main model; `deferredReasons` says which.
     // `interrupted`: a decision new evidence or a stop superseded after it was paid for (never a quiet wake, never a failure).
     const summary = wakeSummary(wakeList);
-    const wakes = { total: summary.total, work: summary.byOutcome.work, thought: summary.byOutcome.thought, deferred: summary.byOutcome.deferred, quiet: summary.quiet, failed: summary.byOutcome.failed, interrupted: summary.byOutcome.interrupted, byTier: summary.byTier, failureReasons: {}, deferredReasons: {}, byReasoning: {} };
+    const wakes = { total: summary.total, work: summary.byOutcome.work, thought: summary.byOutcome.thought, deferred: summary.byOutcome.deferred, quiet: summary.quiet, failed: summary.byOutcome.failed, interrupted: summary.byOutcome.interrupted, byTier: summary.byTier, failureReasons: {}, deferredReasons: {}, byReasoning: {}, ...(summary.values.saved ? { savedTokens: Math.round(summary.values.saved) } : {}) };
     // C2: what became of the actions decided in the window (work-outcome.mjs). `pending`, `visible`, `none`, `undone`,
     // `failed` and `byKind` count TRANSITIONS, by the outcome they moved to: an action that a later message credited
     // (none, then visible) or that the user undid (visible, then undone) is two of them. `settled` and `visibleRate` count
