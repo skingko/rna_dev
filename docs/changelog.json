@@ -1,5 +1,36 @@
 [
   {
+    "version": "0.76.0",
+    "sdk": "0.61.0",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "日报后的复查由运行自己声明，试用中的规则有了出口",
+      "en": "A finished run declares its own follow-up, and a rule stuck on trial gets a way out"
+    },
+    "items": [
+      {
+        "zh": "定时运行（以及它声明出来的跟进）在回复最后多写一行：没有要跟进的就写“无”，有就写一个当天能做完的具体核查任务。宿主据此直接登记这个跟进，或者直接结清这次复查，不再为它唤醒模型做一次完整决策。这一行在送达前去掉，你收到的报告里看不到。",
+        "en": "A scheduled run, and any follow-up it declared, now ends its reply with one line: none when nothing needs a later check, or one concrete task that can finish within the day. The host registers that follow-up or settles the review itself, without waking the model for a full decision. The line is removed before delivery, so your report does not show it."
+      },
+      {
+        "zh": "没写声明、写得不合规、有新的用户消息或失败、有到期日程、有逾期请求或没回答的问题，都照旧交给模型复查；声明链最多连续 4 级。起因是线上一个项目：30 天里 60 次完成之后的复查，36 次选了等待，12 次选了没留下可见结果的行动，只有 12 次有用，合计约 438 万 token。实际能省多少取决于运行写声明的比例，上线后可以在体验报告里核对。",
+        "en": "Without a declaration, with one that does not parse, with a new message from you or a failure, a due schedule, an overdue request or an unanswered question, the model reviews as before; a chain of declared follow-ups stops after 4. It came from one live project: of 60 reviews after a completion in 30 days, 36 ended in a wait, 12 in an action that left nothing visible and only 12 were useful, about 4.38 million tokens in all. The real saving depends on how often runs declare, and the experience report shows it once released."
+      },
+      {
+        "zh": "代价：运行声明的跟进可能比以前模型事后复查选的少。我们认为这是值得的，因为这些补核有一半没留下可见结果，而且更小的上下文做不到更准（轻量唤醒的付费重放没有通过）。",
+        "en": "The cost: the follow-ups a run declares may be fewer than a later review would have chosen. We think that is worth it, since about half of those checks left nothing visible, and a smaller context did not do better (the paid replay of a light wake did not pass)."
+      },
+      {
+        "zh": "进化的技能补丁写入后要靠“用过之后你的下一条消息没纠正”才转正。你不在、工作以后台为主时，这个条件来不了，补丁就一直停在试用里。现在后台运行读到带补丁的技能时也会计数，一条补丁被放进上下文至少 3 次却没人能评价、而你缺席的时间超过你自己最长一次离开的两倍时，会在输入框上方问你一次要不要停用它。",
+        "en": "An evolved skill rule becomes active only when your next message after a use does not correct it. When you are away and the work happens in the background that never comes, and the rule stays on trial. Background runs that read a skill with such a rule are now counted, and when a rule has been put in front of a model at least 3 times with nobody able to judge it, and you have been away more than twice your own longest absence, you are asked once above the composer whether to retire it."
+      },
+      {
+        "zh": "只有你的回答才会停用规则；点“留着”或关掉卡片算拒绝，下一次要等到比这次多一倍的放入次数才会再问，没有固定间隔。试用规则不会因为你说留着就自动转正。线上 13 条试用规则里，调研项目的 3 条会被问，小说项目的 10 条几乎没被任何运行读到，不会被问。",
+        "en": "Only your answer retires a rule. Keep, or closing the card, counts as a refusal and the next question waits for twice as many placements, with no fixed interval. A rule does not become active just because you said keep. Of 13 trial rules live, the 3 in the research project would be asked about; the 10 in the novel project are barely read by any run and are not."
+      }
+    ]
+  },
+  {
     "version": "0.75.0",
     "sdk": "0.60.0",
     "date": "2026-10-22",
