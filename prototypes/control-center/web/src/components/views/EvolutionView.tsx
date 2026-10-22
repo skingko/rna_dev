@@ -297,6 +297,8 @@ function GeneDetail({ projectId, gene: treeGene, branch, standards, onChanged }:
   // D3: what the rule was run for or put in front of the model, never its level (which is derived from these counts).
   if (guard && gene.runs && gene.exposure?.ranRecent !== null && gene.exposure?.ranRecent !== undefined) rows.push([t('近 7 天'), t('运行 {n} 次', { n: gene.exposure.ranRecent })])
   if (patch && gene.exposure && gene.exposure.shown !== null && gene.exposure.shown !== undefined) rows.push([t('用到'), t('放进回合 {shown} 次，照着做 {applied} 次', { shown: gene.exposure.shown, applied: gene.exposure.applied })])
+  // A background run that loaded the skill had the rule in front of it; nobody judges what a background run did, so it is apart from the count above.
+  if (patch && gene.exposure?.inRuns) rows.push([t('后台运行'), t('读到 {runs} 次；后台运行没人评价，不计入照着做', { runs: gene.exposure.inRuns })])
   if ((guard || patch) && gene.harmWatch && gene.status !== 'retired' && gene.status !== 'rejected') rows.push([t('对照'), t('同一个定时任务在它出现后被纠正得更多，正在观察；要不要停用由你决定')])
   if (patch && full?.name) rows.push([t('写进了'), t('技能「{name}」', { name: full.name })])
   if (patch && gene.when) rows.push([t('用在'), gene.when])

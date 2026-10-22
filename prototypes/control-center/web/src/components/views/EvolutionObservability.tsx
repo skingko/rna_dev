@@ -72,7 +72,7 @@ export function Observability({ projectId }: { projectId: string }) {
         <ul className="space-y-0.5">{view.genes.slice(0, 20).map(row => (
           <li key={row.id}><span className="text-fg-2">{row.title}</span>{' · '}{row.layer === 'guard'
             ? (!row.ran ? t('还没运行过') : row.ranRecent === null || row.ranRecent === undefined ? t('运行 {ran} 次，确认 {real} 处真问题', { ran: row.ran, real: row.real }) : t('运行 {ran} 次，最近 7 天 {recent} 次，确认 {real} 处真问题', { ran: row.ran, recent: row.ranRecent, real: row.real }))
-            : row.shown !== null && row.shown !== undefined ? t('放进回合 {shown} 次（最近 7 天 {recent} 个回合），照着做 {applied} 次', { shown: row.shown, recent: row.injectedRecent ?? 0, applied: row.applied }) : t('还没有放进过回合的记录')}</li>
+            : row.shown !== null && row.shown !== undefined ? t('放进回合 {shown} 次（最近 7 天 {recent} 个回合），照着做 {applied} 次', { shown: row.shown, recent: row.injectedRecent ?? 0, applied: row.applied }) : t('还没有放进过回合的记录')}{row.layer !== 'guard' && row.inRuns ? <>{' · '}{t('后台运行读到 {runs} 次（没人评价）', { runs: row.inRuns })}</> : null}</li>
         ))}</ul>
       ))}
       {block(t('经验的去向'), Object.values(lessons.counts).some(row => Object.keys(row).length) ? <ul className="space-y-0.5">{kindLines(lessons.counts)}</ul> : <p className="text-fg-4">{t('还没有经验走到这一步')}</p>)}

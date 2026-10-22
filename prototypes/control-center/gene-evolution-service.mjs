@@ -8,7 +8,8 @@ import { prepareWorkspaceFixture } from '../../packages/sdk/src/project-evaluati
 import { createHash } from 'node:crypto';
 import { GeneStore, guardsOf, guardMatches, guardResult, matchingFiles, GUARD_RUN_FILE_BYTES, quotedTitle, geneLevel, isNoisy, isMechanism, promptSections, TRIAL_USES, GENOME_TOOL_LIMIT, skillLabel, exposureOf, unproven, EXPOSURE_EVIDENCE, generationLine } from './project-genes.mjs';
 import { isBootstrapWorkflowSkill } from '../../packages/sdk/src/bootstrap-lite.mjs';
-import { bm25Rank, grownGenes, usersWord, lessonRank, standingLessons, NEVER_APPLIED_RECALLS } from './project-mind.mjs';
+import { bm25Rank, grownGenes, usersWord, lessonRank, standingLessons, methodGenes, NEVER_APPLIED_RECALLS } from './project-mind.mjs';
+import { NO_EVIDENCE, trialEvidence } from './trial-evidence.mjs';
 import { readProjectInstructions } from './project-instructions.mjs';
 import { replyTargetOf, attributeReply } from './reply-attribution.mjs';
 import { INFRA_GROUPS, infraOfFailure, outcomeRows, addReaction, pairOccurrences, harmAssessment, scoreboard, generationOutcomes, dispositionSummary, geneFates, geneScope, HARM_MIN_SHARED, SETTLED } from './gene-outcomes.mjs';
@@ -134,6 +135,8 @@ const REVIEW_PROBLEMS = {
   summary_accurate: 'The one-sentence summary does not say what the section actually changes.',
   keeps_replaced: 'It softens, drops or makes optional a requirement of the rules it replaces (input.rewrite.rules); keep every number, threshold, name and must/never exactly as strict.',
 };
+/** A stretch of time as the interface reads it, in days from two days on, else in hours. */
+const spanOf = ms => { const days = ms / 86400000; if (days >= 2) { const n = Math.round(days); return { zh: `${n} 天`, en: `${n} days` }; } const hours = Math.max(1, Math.round(ms / 3600000)); return { zh: `${hours} 小时`, en: hours === 1 ? '1 hour' : `${hours} hours` }; };
 // A title fully wrapped in quotes by the model loses them (they are added back where shown); inner quotes stay.
 const bareTitle = value => { const text = String(value ?? '').trim(); const wrapped = /^[「“"]([^「」“”"]+)[」”"]$/.exec(text); return clip(wrapped ? wrapped[1] : text, 20); };
 
@@ -217,11 +220,12 @@ export class GeneEvolutionService {
    * without bringing back what it replaced (that may hold the very thing the user no longer wants; mu never resurrects).
    * The conversation is always told, and the judgments that admitted the gene are labeled first.
    */
-  async retireByUser(projectId, geneId, reason = this.say({ zh: '用户停用', en: 'Retired by the user' })) {
+  async retireByUser(projectId, geneId, reason = this.say({ zh: '用户停用', en: 'Retired by the user' }), { label = true } = {}) {
     const gene = this.project(projectId)?.genes?.genes?.find(row => row.id === geneId);
     // A rule that was offered for retirement because the work got worse after it (D3) leaves on a confounded reading — other rules
     // changed meanwhile, which is why it was only an invitation — so the user's yes says nothing about the judgments that let it in.
-    if (gene && !gene.harmWatch?.invitedAt) this.labelGene(projectId, gene, 'retired');
+    // Nor does a yes to a trial that could get no proof (`label: false`): nothing was found wrong with it.
+    if (gene && label && !gene.harmWatch?.invitedAt) this.labelGene(projectId, gene, 'retired');
     const undo = Boolean(gene) && (gene.origin?.kind === 'consolidation' || String(gene.id).startsWith('skill-merge:'));
     const result = await this.genes.retireGene(projectId, geneId, { reason, restore: undo, as: undo ? 'undone' : 'dropped' });
     if (gene && gene.layer !== 'system' && ['active', 'trial'].includes(gene.status)) this.announceRetirement(projectId, gene, { mode: undo ? 'undo' : 'drop', restored: result?.restored ?? [], reverted: result?.reverted === true, generation: result?.generation ?? null });
@@ -361,9 +365,34 @@ export class GeneEvolutionService {
    * D1 (EVO-4, plan §2.2 D1; mu features/memory.ts:280-352): a working rule was put in a turn's context (the turn block carried it).
    * Counted when it is put in, whatever the turn comes to (`stats.injected`); a rule that was never put in has no use to judge, and
    * one that never was is no "mechanism" the next correction can count as already covering it (judgeReview).
+   * `actionId`: a background run read the rule in its skill (noteSkillLoad): put in front of the model all the same, counted once
+   * per run (`placedIn`) and apart (`stats.injectedRuns`, a part of `injected`), because nobody judges what a background run did:
+   * those placements never become a use, and only count (counts, not promotions) toward the way out of a trial (trial-evidence.mjs).
    */
-  recordInjected(projectId, geneIds) {
-    for (const geneId of geneIds) this.genes.record(projectId, geneId, row => { row.stats = { clean: 0, missed: 0, real: 0, falseMatches: 0, ...row.stats }; row.stats.injected = (row.stats.injected ?? 0) + 1; });
+  recordInjected(projectId, geneIds, { actionId = null } = {}) {
+    for (const geneId of geneIds) this.genes.record(projectId, geneId, row => {
+      if (actionId) { if ((row.placedIn ?? []).includes(actionId)) return; row.placedIn = [...(row.placedIn ?? []), actionId].slice(-12); }
+      row.stats = { clean: 0, missed: 0, real: 0, falseMatches: 0, ...row.stats }; row.stats.injected = (row.stats.injected ?? 0) + 1;
+      if (actionId) row.stats.injectedRuns = (row.stats.injectedRuns ?? 0) + 1;
+    });
+  }
+  /**
+   * A background run (a scheduled occurrence, background work) loaded a skill: the working rules written into it that the loaded
+   * page holds were put in front of its model, which is what `injected` says (ToolPolicy's after hook, every run's tool pipeline).
+   * Foreground turns are not counted here: they have their own (the turn block, and a skill loaded there is only read for the
+   * corrections it may get, loadedRules). Only the skill's own SKILL.md counts, and only the page that holds the rule's section:
+   * a run pinned to an older version, or a page cut before the section, has not read it. Counting never promotes: a trial rule
+   * becomes active only on the user's own feedback (countClean), which no background run brings.
+   * @returns {string[]} the rules counted
+   */
+  noteSkillLoad(projectId, { skillId, actionId, path = null, content = '' } = {}) {
+    if (typeof skillId !== 'string' || !skillId || typeof actionId !== 'string' || !actionId || path && path !== 'SKILL.md' || typeof content !== 'string') return [];
+    const project = this.project(projectId); if (!project || project.simulated === true) return [];
+    const local = skillId.replace(/^gen-[0-9a-f]{16}-/, '');
+    const heading = gene => String(gene.body.note).trim().split('\n')[0];
+    const read = methodGenes(project).filter(gene => gene.body?.skillId === local && content.includes(heading(gene)) && !(gene.placedIn ?? []).includes(actionId));
+    if (read.length) this.recordInjected(projectId, read.map(gene => gene.id), { actionId });
+    return read.map(gene => gene.id);
   }
   /**
    * D1: what a finished turn did about the working rules it carried (lesson.applied, project-mind.mjs afterReply): `uses` is
@@ -1891,11 +1920,56 @@ export class GeneEvolutionService {
     mark({ retireCheckedAt: iso(now), ...(offered ? { retireOffered: iso(now) } : {}) });
     return { proposed: Boolean(offered), geneId };
   }
-  /** The user's answer to a retirement invitation: retire now, or keep it and never ask again. */
-  async answerRetirement(projectId, geneId, choice) {
+  /** The user's answer to a retirement invitation: retire now, or keep it and never ask again (`row`: the invitation; a trial that got no proof is asked again as its evidence grows, answerNoEvidence). */
+  async answerRetirement(projectId, geneId, choice, row = null) {
+    if (row?.usage === NO_EVIDENCE) return this.answerNoEvidence(projectId, geneId, choice, row);
     if (choice === 'keep') { this.genes.record(projectId, geneId, row => { row.keep = true; delete row.retireOffered; }); return { kept: true }; }
     if (geneId.startsWith('skill:')) return this.genes.retireSkill(projectId, geneId.slice('skill:'.length), { reason: this.say({ zh: '你同意停用', en: 'You agreed to retire it' }) });
     return this.retireByUser(projectId, geneId, this.say({ zh: '你同意停用', en: 'You agreed to retire it' }));
+  }
+
+  // ------------------------------------------------------ trials that get no proof (trial-evidence.mjs)
+  /**
+   * The user is here (visible presence, InvitationService.onPresence): a trial working rule that has been put in front of a model
+   * again and again with nothing to judge it by, while the user was away longer than they have ever been in this project, is asked
+   * about once above the composer of the conversation they have in front (else the project's current one). One at a time: nothing
+   * is asked while a card of this kind is open, and a card whose rule left the trial is closed. Counts and times only: no model.
+   * Nothing is retired unless the user says so. Returns the invitation, or null.
+   */
+  offerStalledTrial(projectId, { sessionId = null } = {}) {
+    const project = this.project(projectId); if (!this.ready(project) || typeof this.invitations?.offerGene !== 'function') return null;
+    const live = () => this.store.state.sessions.filter(row => row.projectId === projectId && !row.archivedAt && row.kind !== 'side');
+    const cards = () => live().flatMap(session => (session.invitations ?? []).filter(row => row.kind === 'gene' && row.action === 'retire').map(row => ({ session, row })));
+    const trial = new Set(methodGenes(project).filter(row => row.status === 'trial').map(row => row.id));
+    for (const { session, row } of cards()) if (row.usage === NO_EVIDENCE && !trial.has(row.geneId)) this.invitations.close?.(session.id, row.id, 'expired');
+    if (!trial.size) return null;
+    const open = cards();
+    if (open.some(({ row }) => row.usage === NO_EVIDENCE)) return null;
+    const { ask } = trialEvidence(project, live(), { now: this.now() });
+    if (!ask || open.some(({ row }) => row.geneId === ask.gene.id)) return null;
+    const front = sessionId ? live().find(row => row.id === sessionId) : null, target = front ?? this.mind?.discussionSession?.(projectId);
+    if (!target) return null;
+    const gene = ask.gene, n = (gene.evidenceAsk?.n ?? 0) + 1, span = spanOf(ask.waited);
+    const reason = this.say({ zh: `放进过 ${ask.unjudged} 次，没有一次能判断有没有照做；你已经 ${span.zh}没来了。`, en: `Put in front of the model ${ask.unjudged} times, never once in a way that could be judged; you have been away for ${span.en}.` });
+    const offered = this.invitations.offerGene(target.id, { projectId, geneId: gene.id, action: 'retire', title: bareTitle(gene.title), usage: NO_EVIDENCE, runs: ask.unjudged, reason, cycle: `evidence${n}` });
+    if (offered) { this.genes.record(projectId, gene.id, row => { row.evidenceAsk = { ...(row.evidenceAsk ?? {}), n, at: iso(this.now()), unjudged: ask.unjudged, outcome: 'asked' }; }); this.count(projectId, 'A', 'trial_no_evidence_offered'); }
+    return offered ?? null;
+  }
+  /**
+   * The answer to such a card. "Retire" retires the rule (nothing was found wrong with it, so no judgment is labelled by it). "Keep"
+   * and closing the card are a refusal: the user puts up with rules that run unjudged up to that many placements, so the project's
+   * next ask needs twice as many (evidenceBar). Either way they were here: the wait counts from now (`answeredAt`).
+   */
+  async answerNoEvidence(projectId, geneId, choice, row = {}) {
+    this.noteTrialAnswer(projectId, geneId, choice === 'retire' ? 'retired' : 'kept', row.runs);
+    if (choice !== 'retire') return { kept: true };
+    return this.retireByUser(projectId, geneId, this.say({ zh: '你同意停用', en: 'You agreed to retire it' }), { label: false });
+  }
+  /** What an answer to a no-evidence card leaves: on the rule, how it went; on the project, the refusal's size and when they last answered. */
+  noteTrialAnswer(projectId, geneId, outcome, unjudged = 0) {
+    const at = iso(this.now());
+    this.genes.record(projectId, geneId, row => { row.evidenceAsk = { ...(row.evidenceAsk ?? {}), outcome, answeredAt: at }; });
+    try { this.store.mutate(state => { const project = this.project(projectId, state); if (!project) return; project.genes ??= { genes: [], generations: [] }; const asks = project.genes.evidenceAsks ??= {}; asks.answeredAt = at; if (outcome !== 'retired') asks.refused = Math.max(asks.refused ?? 0, Number.isSafeInteger(unjudged) ? unjudged : 0); }); } catch { /* the answer itself is already given */ }
   }
 
   // ------------------------------------------------------ harm detection (D3)

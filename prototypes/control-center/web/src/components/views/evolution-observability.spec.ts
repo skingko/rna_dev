@@ -110,3 +110,13 @@ it('a read that fails says so and the page goes on', async () => {
   await act(async () => { root.render(createElement(Observability, { projectId: 'p' })) }); await settle()
   expect(host.textContent).toContain('进化观测暂时读不到：offline')
 })
+
+it('a rule only background runs read says so apart from the turns it was put in: those runs are never judged', async () => {
+  const runs = { ...OBSERVED, genes: [{ ...OBSERVED.genes[1], shown: 0, applied: 0, injectedRecent: 0, inRuns: 17 }] }
+  setTransport({ ...getTransport(), kind: 'mock', request: async () => runs } as Transport)
+  await act(async () => { root.render(createElement(Observability, { projectId: 'p' })) }); await settle()
+  expect(host.textContent).toContain('放进回合 0 次（最近 7 天 0 个回合），照着做 0 次 · 后台运行读到 17 次（没人评价）')
+  usePreferences.setState({ language: 'en' })
+  await act(async () => { root.render(createElement(Observability, { projectId: 'q' })) }); await settle()
+  expect(host.textContent).toContain('followed 0 times · Read in 17 background runs (nobody judges those)')
+})

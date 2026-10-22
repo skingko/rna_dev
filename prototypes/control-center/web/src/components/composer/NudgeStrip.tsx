@@ -37,7 +37,7 @@ const REASON_QUESTIONS: Record<string, string> = localized({
   conflicts_user_lesson_unnamed: '我得出了一条新经验“{text}”，和你之前定的一条规则冲突。换成新的吗？',
 })
 /** Evolution decisions: one sentence per reason, so each reads naturally in every language. */
-const GENE_QUESTIONS: Record<string, string> = localized({ unused: '技能「{title}」一个月没用过了，要停用吗？', never_caught: '检查「{title}」运行了 {runs} 次都没发现问题，要停用吗？', no_effect: '对照最近的对话，「{title}」好像没起作用，要停用吗？', not_checkable: '检查「{title}」查的是需要判断的内容，程序查不准。要停用这项检查吗？规则本身会留下。', never_ran: '检查「{title}」还从没运行过（没有匹配的文件）。工具位已满，要停用它吗？', never_followed: '做法「{title}」已有 {runs} 次用得上，却一次都没照做过。要停用吗？', harm: '同一个定时任务里，「{title}」出现之后被纠正得更多了，要停用吗？' })
+const GENE_QUESTIONS: Record<string, string> = localized({ unused: '技能「{title}」一个月没用过了，要停用吗？', never_caught: '检查「{title}」运行了 {runs} 次都没发现问题，要停用吗？', no_effect: '对照最近的对话，「{title}」好像没起作用，要停用吗？', not_checkable: '检查「{title}」查的是需要判断的内容，程序查不准。要停用这项检查吗？规则本身会留下。', never_ran: '检查「{title}」还从没运行过（没有匹配的文件）。工具位已满，要停用它吗？', never_followed: '做法「{title}」已有 {runs} 次用得上，却一次都没照做过。要停用吗？', no_evidence: '做法「{title}」已经用了 {runs} 次，却一次都没能评价它，试用没法往下走。要停用吗？', harm: '同一个定时任务里，「{title}」出现之后被纠正得更多了，要停用吗？' })
 const DONE_MS = 2200, THANKS_MS = 4000
 /** Decisions are asked once: the host learns this one was put in front of the user, so a message they send instead lets it lapse. */
 const DECISION_KINDS = new Set(['lesson', 'gene', 'commitment', 'schedule', 'task', 'schedule_pause'])
@@ -125,7 +125,7 @@ export function NudgeStrip({ sessionId, typing }: { sessionId: string | null; ty
     await sendFeedback(sessionId, invitation.itemId, value, clean, { quiet: true })
   }
   // Lesson: confirm, retire, or say it better.
-  // Evolution decision: retire it, or keep it (never asked again).
+  // Evolution decision: retire it, or keep it (never asked again; a trial rule that got no proof is asked again only when its placements have doubled).
   const decide = async (choice: 'retire' | 'keep' | 'fix' | 'later' | 'continue' | 'drop' | 'accept' | 'decline' | 'pause') => {
     if (!invitation) return
     finish(({ retire: t('好，已停用。'), keep: t('好，留着。'), fix: t('好，这就改。'), later: t('好，先不动。'), continue: t('好，接着做。'), drop: t('好，这件不做了。'), accept: t('好，已经排上了。'), decline: t('好，不排。'), pause: t('好，已暂停。') } as Record<string, string>)[choice])

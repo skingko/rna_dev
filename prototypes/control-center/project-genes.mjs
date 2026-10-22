@@ -117,12 +117,16 @@ export function bumpExposure(gene, field, at = Date.now()) {
  * `stats.injected`, the turn block that carried it; a rule judged relevant to a reply was shown whatever put it there, so the
  * count is never below `stats.recalled`; null until either was written) and used when a confident judgment said the reply followed
  * it (`stats.applied`). `recalled` is D1's own count: the turns where the rule was judged relevant (followed it or went against it).
+ * `inRuns`: the background runs that read the rule in its skill (`stats.injectedRuns`, a part of `stats.injected`). Nobody judges
+ * a background run (its work is never put to the lesson.applied judgment, and the user's next message is no answer to it), so
+ * those are not `shown`: `shown` stays what the bloat rule and the analyses read it as, a count of placements a judgment could use.
  */
 export function exposureOf(gene, { now = Date.now(), days = 7 } = {}) {
   const stats = gene?.stats ?? {}, since = dayKey(now - (days - 1) * DAY_MS), counted = gene?.exposure?.days;
   const recent = Object.entries(counted ?? {}).filter(([day]) => day >= since).reduce((sum, [, row]) => sum + (row?.ran ?? 0), 0);
-  const shown = stats.injected == null && !stats.recalled ? null : Math.max(stats.injected ?? 0, stats.recalled ?? 0);
-  return { ran: gene?.runs ?? 0, ranRecent: gene?.layer === 'guard' && counted && typeof counted === 'object' ? recent : null, hits: gene?.hits ?? 0, real: stats.real ?? 0, falseMatches: stats.falseMatches ?? 0, shown, recalled: stats.recalled ?? 0, applied: stats.applied ?? 0, notFollowed: stats.notFollowed ?? 0, missed: stats.missed ?? 0, lastRunAt: gene?.lastRunAt ?? null };
+  const inRuns = Math.min(stats.injectedRuns ?? 0, stats.injected ?? 0);
+  const shown = stats.injected == null && !stats.recalled ? null : Math.max((stats.injected ?? 0) - inRuns, stats.recalled ?? 0);
+  return { ran: gene?.runs ?? 0, ranRecent: gene?.layer === 'guard' && counted && typeof counted === 'object' ? recent : null, hits: gene?.hits ?? 0, real: stats.real ?? 0, falseMatches: stats.falseMatches ?? 0, shown, inRuns, recalled: stats.recalled ?? 0, applied: stats.applied ?? 0, notFollowed: stats.notFollowed ?? 0, missed: stats.missed ?? 0, lastRunAt: gene?.lastRunAt ?? null };
 }
 /**
  * The bloat rule's evidence for one skill rule (rrsi history.py:143-163: prune what measured no yield): it earned nothing when
@@ -130,12 +134,13 @@ export function exposureOf(gene, { now = Date.now(), days = 7 } = {}) {
  * written put it in front of the model at all (`observed`: the turns whose exposure was judged, `putIn` the ones of them that
  * carried this rule, either way, both counted by the caller from the turns' records). A rule the user confirmed or kept, or one
  * followed even once, has earned its place. With no exposure records (nothing shown, nothing observed) nothing can be said:
- * that is not evidence.
+ * that is not evidence. A rule only background runs read (`inRuns`) is neither: those runs are never judged, so "never
+ * followed" is unmeasured for it, and it did reach a model (the trial that has no road to proof is trial-evidence.mjs's).
  */
 export function unproven(gene, observed = 0, { evidence = EXPOSURE_EVIDENCE, putIn = 0 } = {}) {
-  const stats = gene?.stats ?? {}, shown = exposureOf(gene).shown, applied = stats.applied ?? 0;
+  const stats = gene?.stats ?? {}, { shown, inRuns } = exposureOf(gene), applied = stats.applied ?? 0;
   if (applied > 0 || gene?.confirmedAt || (gene?.confirmations ?? 0) > 0 || gene?.keep === true) return false;
-  return shown !== null && shown >= evidence || (shown ?? 0) === 0 && putIn === 0 && observed >= evidence;
+  return shown !== null && shown >= evidence || (shown ?? 0) === 0 && inRuns === 0 && putIn === 0 && observed >= evidence;
 }
 
 /** Sections of a system prompt: blank-line paragraphs, or sentence groups for a one-paragraph prompt. */

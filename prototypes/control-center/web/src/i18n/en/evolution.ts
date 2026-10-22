@@ -35,5 +35,9 @@ export default {
   '程序从文件里查不出这条规则，可以不再用；规则本身会留下': 'A program cannot tell this rule from the file, so the check can go; the rule itself stays',
   '检查「{title}」查的是需要判断的内容，程序查不准。要停用这项检查吗？规则本身会留下。': 'The check “{title}” looks for something that needs judgment, which a program cannot check reliably. Retire the check? The rule itself stays.',
   '做法「{title}」已有 {runs} 次用得上，却一次都没照做过。要停用吗？': 'The working rule “{title}” has come up in {runs} turns and was never followed. Retire it?',
+  '做法「{title}」已经用了 {runs} 次，却一次都没能评价它，试用没法往下走。要停用吗？': 'The working rule “{title}” has been used {runs} times without anything that could judge it, so its trial cannot move on. Retire it?',
+  后台运行: 'Background runs',
+  '读到 {runs} 次；后台运行没人评价，不计入照着做': 'Read in {runs} {runs|run|runs}; nobody judges a background run, so they do not count as followed',
+  '后台运行读到 {runs} 次（没人评价）': 'Read in {runs} background {runs|run|runs} (nobody judges those)',
   '检查「{title}」还从没运行过（没有匹配的文件）。工具位已满，要停用它吗？': 'The check “{title}” has never run (no file matched it). Tool slots are full — retire it?',
 } as const satisfies Record<string, string>

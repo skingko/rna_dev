@@ -442,7 +442,7 @@ export interface Invitation {
   geneId?: string
   action?: 'retire' | (string & {})
   title?: string
-  usage?: 'unused' | 'never_caught' | 'no_effect' | (string & {})
+  usage?: 'unused' | 'never_caught' | 'no_effect' | 'never_followed' | 'no_evidence' | (string & {})
   runs?: number
   /** gene fix_hits: hits of a new check in existing files */
   total?: number

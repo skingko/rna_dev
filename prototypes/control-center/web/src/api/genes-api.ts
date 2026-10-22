@@ -65,12 +65,12 @@ export interface Gene {
   deepCheck?: DeepCheck | null
   /** a rule that left: how (undone, dropped, contradicted, ...), or the gate that stopped it (rejected:<code>, retryable:<code>) */
   fate?: string
-  /** checks and skill rules: what the rule was run for (ranRecent: null until runs are counted by day) or put in front of the model (shown: null until recorded; recalled: judged relevant to a reply) — never the self-confirming level */
+  /** checks and skill rules: what the rule was run for (ranRecent: null until runs are counted by day) or put in front of the model (shown: null until recorded; inRuns: read by background runs, which nobody judges, so apart from shown; recalled: judged relevant to a reply) — never the self-confirming level */
   exposure?: GeneExposure
   /** the scheduled work was corrected more often after this rule (under watch; the user is invited, never decided for) */
   harmWatch?: { since?: ISODate; shared: number; delta: number | null }
 }
-export interface GeneExposure { ran: number; ranRecent: number | null; hits: number; real: number; falseMatches: number; shown: number | null; recalled: number; applied: number; notFollowed: number; missed: number; lastRunAt?: ISODate | null }
+export interface GeneExposure { ran: number; ranRecent: number | null; hits: number; real: number; falseMatches: number; shown: number | null; inRuns?: number; recalled: number; applied: number; notFollowed: number; missed: number; lastRunAt?: ISODate | null }
 export interface DeepCheck { status: 'running' | 'done' | 'failed'; startedAt?: ISODate; at?: ISODate; verdict?: 'better' | 'same' | 'worse' | 'unclear' | 'unavailable'; baselineScore?: number | null; candidateScore?: number | null; cases?: number | null; code?: string; reason?: string }
 /** One gene in full (GET …/genes/:geneId): what the detail panel shows below the summary. */
 export interface GeneContent {

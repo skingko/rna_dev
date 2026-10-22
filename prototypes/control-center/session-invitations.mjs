@@ -6,6 +6,7 @@ import { revokedLabel } from './project-background-controls.mjs';
 import { guardsOf } from './project-genes.mjs';
 import { guardScript } from './tool-policy.mjs';
 import { pauseVerdict, deliveriesOf } from './schedule-attention.mjs';
+import { NO_EVIDENCE } from './trial-evidence.mjs';
 
 // Light invitations shown above the composer (plan 2026-09-30 §2.1): things
 // about how we work together that the user may answer or close, never a
@@ -114,10 +115,10 @@ export class InvitationService {
     this.store.mutate(state => { const session = state.sessions.find(row => row.id === sessionId); if (session && !session.archivedAt) offered = offerInvitation(session, { kind: 'lesson', subject: `lesson:${lessonId}`, projectId, lessonId, text: String(text).slice(0, 400), lessonKind: lessonKind ?? null, ...(typeof reason === 'string' && reason ? { reason } : {}), ...(typeof conflictText === 'string' && conflictText.trim() ? { conflictText: conflictText.trim().slice(0, 400) } : {}) }, { now: this.now() }); });
     return offered;
   }
-  /** An evolution decision for the user (retire an unused skill or a check that never caught anything). */
-  offerGene(sessionId, { projectId, geneId, action = 'retire', title, usage = null, runs = null, total = null, files = null, reason = null, ledgerId = null }) {
+  /** An evolution decision for the user (retire an unused skill or a check that never caught anything). `cycle`: a decision asked again as its evidence grows (a trial that got no proof) is a new subject each time, since one subject is asked at most once. */
+  offerGene(sessionId, { projectId, geneId, action = 'retire', title, usage = null, runs = null, total = null, files = null, reason = null, ledgerId = null, cycle = null }) {
     let offered = null;
-    this.store.mutate(state => { const session = state.sessions.find(row => row.id === sessionId); if (session && !session.archivedAt) offered = offerInvitation(session, { kind: 'gene', subject: `${action}:${geneId}`, projectId, geneId, action, title: String(title ?? '').slice(0, 120), ...(usage ? { usage } : {}), ...(Number.isSafeInteger(runs) ? { runs } : {}), ...(Number.isSafeInteger(total) ? { total } : {}), ...(Number.isSafeInteger(files) ? { files } : {}), ...(typeof reason === 'string' && reason.trim() ? { reason: reason.trim().slice(0, 200) } : {}), ...(ledgerId ? { ledgerId } : {}) }, { now: this.now() }); });
+    this.store.mutate(state => { const session = state.sessions.find(row => row.id === sessionId); if (session && !session.archivedAt) offered = offerInvitation(session, { kind: 'gene', subject: `${action}:${geneId}${typeof cycle === 'string' && cycle ? `:${cycle}` : ''}`, projectId, geneId, action, title: String(title ?? '').slice(0, 120), ...(usage ? { usage } : {}), ...(Number.isSafeInteger(runs) ? { runs } : {}), ...(Number.isSafeInteger(total) ? { total } : {}), ...(Number.isSafeInteger(files) ? { files } : {}), ...(typeof reason === 'string' && reason.trim() ? { reason: reason.trim().slice(0, 200) } : {}), ...(ledgerId ? { ledgerId } : {}) }, { now: this.now() }); });
     return offered;
   }
   /** A pending request past its time: keep going, or drop it (plan §2.1: 承诺逾期). */
@@ -161,7 +162,9 @@ export class InvitationService {
     const asked = await Promise.resolve(this.mind?.askOpenQuestions?.(projectId)).catch(() => null);
     const suggested = await this.suggestSchedule(projectId).catch(() => null);
     const pause = await pausing;
-    return { folded, suggested, ...(asked ? { asked } : {}), ...(pause ? { pause } : {}) };
+    // A trial working rule that cannot get its proof (the user away, its work done in the background): counts and times only, so it needs no await.
+    let trial = null; try { trial = this.genes?.offerStalledTrial?.(projectId, { sessionId }) ?? null; } catch { /* the other reports stand */ }
+    return { folded, suggested, ...(asked ? { asked } : {}), ...(pause ? { pause } : {}), ...(trial ? { trial } : {}) };
   }
   /** Background work that needs the user (failed, or an outcome only they can confirm), asked here instead of on the task page. */
   offerTask(sessionId, { projectId, actionId, mode, text }) {
@@ -427,6 +430,8 @@ export class InvitationService {
       this.label(row, 'invite_dismissed');
       if (row.kind === 'lesson') this.mind?.answerLessonInvitation(row.projectId, row.lessonId, { choice: 'dismiss', sessionId });
       if (row.kind === 'schedule_pause') this.notePauseAnswer(row, 'dismissed');
+      // Closing a trial's no-evidence card is a refusal like "keep" (the project's next ask needs twice the placements).
+      if (row.kind === 'gene' && row.usage === NO_EVIDENCE) this.genes?.noteTrialAnswer?.(row.projectId, row.geneId, 'dismissed', row.runs);
       return { sessionId, invitationId, closed: true, outcome: 'dismissed', revision: this.store.state.revision };
     }
     const answered = label => { this.store.mutate(state => closeInvitation(state.sessions.find(item => item.id === sessionId), invitationId, 'answered', { now: this.now() })); this.label(row, label); return { sessionId, invitationId, closed: true, outcome: 'answered', revision: this.store.state.revision }; };
@@ -448,7 +453,7 @@ export class InvitationService {
     if (row.kind === 'gene') {
       expect(['retire', 'keep']);
       if (!this.genes) throw fail('进化服务未启用', 503, 'genes_unavailable');
-      await this.genes.answerRetirement(row.projectId, row.geneId, input.choice);
+      await this.genes.answerRetirement(row.projectId, row.geneId, input.choice, row);
       return answered(input.choice === 'retire' ? 'retire_accepted' : 'retire_declined');
     }
     if (row.kind === 'commitment') {

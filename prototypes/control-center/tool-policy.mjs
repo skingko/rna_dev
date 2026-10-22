@@ -15,7 +15,8 @@ import { PERSISTENT_ATTEMPTS } from './diagnostics-service.mjs';
 // runtime — foreground turn, background run, subagent — asks it for the same hooks (createRnaRuntime):
 //   before: the user's constraint gate (JEV tool.constraint) beside the run's own wait (a turn's start checkpoint or
 //           worktree sync), then the pre-write baseline once that wait settled (a start sync may still be writing);
-//   after:  evolution guards and code diagnostics on the written file, and accounting of direct guard-tool calls.
+//   after:  evolution guards and code diagnostics on the written file, accounting of direct guard-tool calls, and the working
+//           rules a background run read in a skill it loaded (they were put in front of its model: `stats.injected`).
 //
 // The pre-write baseline is shared by guards and diagnostics (§2.3 #4; mu lsp.ts:243-247, lsp-diagnostics.md §1-3):
 // before the first write to a path in a run, the file's text is kept, and what each check finds on it; after each
@@ -380,6 +381,15 @@ export class ToolPolicy {
       });
       return { entry, hits };
     };
+    /** A background run that reads a skill has the working rules written into it in front of its model: counted, once per run
+     * (gene-evolution-service.mjs noteSkillLoad). A foreground turn's rules are put in its turn block, and counted there. */
+    const noteSkill = result => {
+      if (!actionId || runTurn || typeof this.genes?.noteSkillLoad !== 'function') return;
+      try {
+        const page = JSON.parse(result?.content?.find(block => block.type === 'text')?.text ?? 'null');
+        if (page && typeof page === 'object') this.genes.noteSkillLoad(projectId, { skillId: page.id, actionId, path: page.path, content: page.content });
+      } catch { /* counting never blocks a run */ }
+    };
     return {
       purpose,
       /**
@@ -402,6 +412,7 @@ export class ToolPolicy {
       async after({ tool, args, result, isError, signal } = {}) {
         // A call the host refused (an authorization receipt: executed false) never ran: it used no guard, wrote nothing.
         if (result?.details?.executed === false) return undefined;
+        if (tool?.name === 'skill_load' && !isError) noteSkill(result);
         const direct = recordDirect(tool, result, isError);
         if (direct) return direct.hits && !fixHitsAccepted(direct.entry) ? directNote(direct.entry) : undefined;
         if (!WRITE_TOOLS.includes(tool?.name) || isError) return undefined;
