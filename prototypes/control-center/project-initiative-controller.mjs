@@ -32,7 +32,8 @@ import { prepareJudgmentPolicy, validJudgmentPolicy } from './judgment-policy-se
 import { projectInitiativeAvailability } from './project-initiative-availability.mjs';
 import { scheduleContractText, schedulePromptVersionOfStore } from './schedule-prompt.mjs';
 import { backgroundActionView, controlBackgroundAction, backgroundControlTools, jobStepKinds } from './project-background-controls.mjs';
-import { extractHandoff, stripHandoff, oneLine, quietReach, reachRank, REACH_TIERS } from '../../packages/sdk/src/proactive-message.mjs';
+import { extractHandoff, extractFollowUp, stripHandoff, oneLine, quietReach, reachRank, REACH_TIERS } from '../../packages/sdk/src/proactive-message.mjs';
+import { declaredFollowUp, FOLLOW_UP_INSTRUCTION } from './declared-follow-up.mjs';
 import { capReach, sentDigest, recentDeliveries, messageViolations, checkedMessageViolations, messageRecheck, projectKindOf, recordDelivery, trimInbox, settleDeliveryFeedback, attributeReplies, digestDue, composeDigest, digestLines } from './proactive-delivery.mjs';
 import { liveBus, toolKind, toolTarget, stepKind } from './live-bus.mjs';
 import { narrate, applyNarration, narratedView, pacingRecord, NARRATOR_VERSION, welcomeBackDue, composeWelcomeBack, applyWelcomeBack, resolveThreads, applyResolution, threadReactions, applyReactions, ensureMind, WRITING_CONTRACT, revisionPrompt, REVISION_TEXT_LIMIT, SCHEDULED_DELIVERY_INSTRUCTION } from './proactive-narrator.mjs';
@@ -367,6 +368,13 @@ const HISTORY_SCOPE = 'Current project, non-archived conversations and retained 
 export function wakeOutcome(result) {
   // A floor wake that kept the rest its last wait asked for (SDK MAX_REST_MS): settled without the model, like a judged deferral.
   if (result?.status === 'idle' && result.reason === 'unchanged_since_wait') return { outcome: 'deferred', reason: 'unchanged_since_wait', saved: Number.isFinite(result.savedTokens) ? result.savedTokens : 0 };
+  // A decision the host made from the finished run's own declaration (declared-follow-up.mjs): no request. A declared task that was
+  // admitted is work (its ladder follows its outcome like any other); a declared "none", or a task that was not admitted, is settled
+  // without the model, like a judged deferral.
+  if (result?.status === 'decided' && result.declared) {
+    if (result.decision?.action !== 'wait' && result.admitted !== false) return { outcome: 'work', reason: 'declared_follow_up', ...(Number.isFinite(result.savedTokens) ? { saved: result.savedTokens } : {}) };
+    return { outcome: 'deferred', reason: result.decision?.action === 'wait' ? 'declared_no_follow_up' : 'declared_not_admitted', saved: Number.isFinite(result.savedTokens) ? result.savedTokens : 0 };
+  }
   if (result?.status === 'judgment_deferred') return { outcome: 'deferred', reason: result.reason ?? 'judged_idle' };
   // A paid decision that new evidence or a stop superseded: recorded (with its tokens), never moving the ladder.
   if (result?.status === 'stale' && Number(result.usage?.totalTokens) > 0) return { outcome: 'interrupted', reason: result.reason ?? 'interrupted' };
@@ -1712,7 +1720,7 @@ export class ProjectInitiativeController {
       } else {
         // A scheduled run in its own worktree does not wait for a foreground turn (design §8); plan mode still holds it.
         if ((!this.isolatedProject(current.id) && this.foregroundBusy(current.id)) || this.planning(current.id)) return true;
-        if (!coordinator.state.actions.some(row => row.id === occurrence.actionId)) await coordinator.enqueueHostAction({ id: occurrence.actionId, action: 'work', reason: 'A persisted project schedule is due; perform this occurrence once within current permissions.', content: `Scheduled occurrence ${occurrence.key}\nDue: ${occurrence.scheduledAt}\nTime rule: ${JSON.stringify(schedule.rule)}\n\n${schedule.task}\n\nProduce the requested deliverable using current evidence and authorized tools. Report actual outputs and any limitation. The host will deliver this result to the configured project conversation; do not send it to another channel. ${SCHEDULED_DELIVERY_INSTRUCTION}`, source, hostSchedule });
+        if (!coordinator.state.actions.some(row => row.id === occurrence.actionId)) await coordinator.enqueueHostAction({ id: occurrence.actionId, action: 'work', reason: 'A persisted project schedule is due; perform this occurrence once within current permissions.', content: `Scheduled occurrence ${occurrence.key}\nDue: ${occurrence.scheduledAt}\nTime rule: ${JSON.stringify(schedule.rule)}\n\n${schedule.task}\n\nProduce the requested deliverable using current evidence and authorized tools. Report actual outputs and any limitation. The host will deliver this result to the configured project conversation; do not send it to another channel. ${SCHEDULED_DELIVERY_INSTRUCTION} ${FOLLOW_UP_INSTRUCTION}`, source, hostSchedule });
       }
       await coordinator.drainHostActions({ presence: this.presence(current) });
       handled = true;
@@ -1935,7 +1943,10 @@ export class ProjectInitiativeController {
           const pendingEvidence = context.pendingGateEvidence ?? [], liveIds = new Set([...sources.map(row => row.id), ...(saved.events ?? []).map(row => row.id)]);
           const unread = pendingEvidence.filter(row => liveIds.has(row.id)), situation = hash([context.scope, revision, saved.decisionRevision ?? null, gateProgress?.key ?? null, floor.eligible, unread.map(row => row.id)]);
           const remembered = context.gateWake?.situation === situation && this.now() < context.gateWake.until ? context.gateWake.gate : null;
-          const gate = !saved.pendingFailureReview && wakeEligible && decisionDue
+          // A scheduled run (or a follow-up it declared) that ended with its own FOLLOW-UP line settles the review of its completion
+          // itself: the host makes that decision, without the judge and without a request (declared-follow-up.mjs).
+          const declared = !saved.pendingFailureReview && wakeEligible && decisionDue && !remembered ? this.declaredDecisionFor(context, current, unread) : null;
+          const gate = !saved.pendingFailureReview && wakeEligible && decisionDue && !declared
             ? remembered ?? await this.decisions?.review('initiative.review', current, { evidence: unread.length ? unread : (saved.events ?? []).slice(-6), freshCount: unread.length, revision: reviewRevision, signal: context.judgeAbort.signal, progress: gateProgress }) : null;
           gateOutcome = gate;
           // Why the host sent this wake to the main model past the judge (effort.decision never codes such a wake light).
@@ -1955,7 +1966,7 @@ export class ProjectInitiativeController {
           // C2: which action this decision admitted is read from what the tick added to the coordinator's actions.
           actionsBefore = new Set(context.coordinator.state.actions.map(row => row.id)); context.wakeTier = null;
           // A wake the host forces to the main model past the judge (wakeBypass: an overdue request, a delivery just completed) is never rested.
-          const result = await context.coordinator.tick({ presence: this.presence(this.project(project.id)), decisionEnabled: wakeEligible, cacheWindowUntil, wakeFloor: floor.eligible, unchangedRest: !context.wakeBypass });
+          const result = await context.coordinator.tick({ presence: this.presence(this.project(project.id)), decisionEnabled: wakeEligible, cacheWindowUntil, wakeFloor: floor.eligible, unchangedRest: !context.wakeBypass, ...(declared ? { declaredDecision: declared } : {}) });
           if (gate?.review === true && !['decided', 'stale'].includes(result.status)) context.gateWake = { situation, gate, until: Number.isFinite(gate.retryAt) ? gate.retryAt : this.now() + GATE_WAKE_RETRY_MS };
           else if (['decided', 'stale'].includes(result.status)) context.gateWake = null;
           return result;
@@ -2125,6 +2136,14 @@ export class ProjectInitiativeController {
       .catch(failure => { context.lastErrorCode = failure?.code ?? 'initiative_error'; })
       .finally(() => { context.reviewPromise = null; });
     await context.reviewPromise;
+  }
+  /** The decision a finished run's own declaration lets the host make for these unread rows, or null (the judge and the model decide). Never throws. */
+  declaredDecisionFor(context, project, unread) {
+    try {
+      if (!project || !Array.isArray(unread) || !unread.length || typeof this.decisions?.declaredReviewAllowed !== 'function') return null;
+      if (!this.decisions.declaredReviewAllowed(project, { evidence: unread })) return null;
+      return declaredFollowUp({ project, unread, actions: context.coordinator.state.actions, now: this.now() });
+    } catch { return null; }
   }
   /**
    * Background wake ladder (Headlong): empty wakes back off, failures step down, and (C2, option C) only a visible
@@ -3893,6 +3912,8 @@ export class ProjectInitiativeController {
       // Stopped on an unsent tool call: no report to show or build on. The changes and tool receipts stand;
       // the next review is told to check them instead of reading a half-finished step as the result.
       const unreported = unsentToolCall(finalText), reported = unreported ? null : extractHandoff(finalText);
+      // A scheduled run, and a follow-up that was itself declared, may declare what is left (FOLLOW-UP: none | a task); the line never reaches the user.
+      const followUp = !unreported && (action.hostSchedule || action.hostDeclared) ? extractFollowUp(finalText) : null;
       const language = interfaceLanguageOf(this.store.state), unreportedLines = unreported ? unreportedText({ task: oneLine(this.handoffTask(context, action), 160), language }) : null;
       const summary = unreportedLines ? unreportedLines.summary : written;
       const handoff = unreportedLines ? unreportedLines.handoff : reported ?? excerptHandoff(finalText, language);
@@ -3900,7 +3921,7 @@ export class ProjectInitiativeController {
       // its action_completed observation) stays the bounded excerpt later decisions read; the job keeps the full text
       // until its occurrence settles (scheduledResult, dropDeliveredTexts).
       const deliveryText = action.hostSchedule && !unreported ? stripHandoff(finalText) : '';
-      this.finishJob(context, action, { status: 'completed', output: summary, handoff, ...(deliveryText ? { deliveryText } : {}), ...(unreported ? { unreported: true } : {}), runtimeFile: snapshot.sessionFile, usage });
+      this.finishJob(context, action, { status: 'completed', output: summary, handoff, ...(deliveryText ? { deliveryText } : {}), ...(unreported ? { unreported: true } : {}), ...(followUp ? { followUp } : {}), runtimeFile: snapshot.sessionFile, usage });
       this.labelEffort(run.effort, !unreported);
       return { summary, handoff, usage, reported, ...(unreported ? { unreported: true } : {}) };
     } catch (failure) {

@@ -603,6 +603,8 @@ export interface InitiativeAction extends InitiativeDecision {
   /** share/ask: what the delivery came to, as the host handler's outcome code (shared, filed, held …). */
   deliveryOutcome?: string;
   hostSchedule?: HostScheduleIdentity; hostIdentity?: string; hostScheduleSettled?: boolean;
+  /** Admitted from `tick({ declaredDecision })`: the host's own meta (a finished run declared this follow-up). */
+  hostDeclared?: Record<string, unknown>;
   /** Control receipts are bounded to 64; CAS revision rejects retries older than retained receipts. */
   controlRevision?: number; controls?: InitiativeActionControl[]; pausedAt?: number; checkpoint?: InitiativeActionCheckpoint;
   /** Non-evicting host source identities for derived-data deletion, including sources whose receipts were compacted. At most 128 distinct conversations per action. */
@@ -628,7 +630,7 @@ export interface InitiativeFailure {
 export interface InitiativeState {
   schemaVersion: 1; revision: number; events: Observation[]; seenEventIds: string[]; actions: InitiativeAction[];
   decisionRevision: number; nextReviewAt: number; lastSharedAt: number | null; usedTokens: number; reservedTokens: number;
-  idleCount?: number; failureCount?: number; failureRetryAt?: number; estimatedTokens?: number; policy?: InitiativePolicy; lastDecision?: InitiativeDecision & { revision: number; at: number; situation?: string; admission?: InitiativeAdmission; responseContract?: JsonOutputContract; timeoutPolicy?: CompletionTimeoutPolicy };
+  idleCount?: number; failureCount?: number; failureRetryAt?: number; estimatedTokens?: number; policy?: InitiativePolicy; lastDecision?: InitiativeDecision & { revision: number; at: number; situation?: string; declared?: true; admission?: InitiativeAdmission; responseContract?: JsonOutputContract; timeoutPolicy?: CompletionTimeoutPolicy };
   reviewSchedule?: { at: number; requested: number; count: number };
   externalReviewBarrier?: { revision: number; key: string };
   pendingFailureReview?: { actionId: string; evidenceKey: string }; lastFailureReviewEvidenceKey?: string; externalEvidenceKey?: string;
@@ -685,7 +687,8 @@ export type InitiativeTickResult =
   /** usage: what the superseded decision was charged (zero when it was superseded before it was sent). */
   | { status: 'stale'; reason: 'new_evidence' | 'interrupted'; usage?: InitiativeDecisionUsage }
   /** admitted:false — the decided action was not queued: an exact duplicate, or work the host's workCheck found already covered. */
-  | { status: 'decided'; decision: InitiativeDecision; admitted?: boolean; admission?: InitiativeAdmission; running: number; deferred: number; usage: InitiativeDecisionUsage; attempts: number; messageRepairs?: number; reasoning?: InitiativeDecisionReasoning };
+  /** declared: the decision came from `tick({ declaredDecision })` (no request; `savedTokens` estimates the request that was not sent) and carries the host's meta. */
+  | { status: 'decided'; decision: InitiativeDecision; admitted?: boolean; admission?: InitiativeAdmission; running: number; deferred: number; usage: InitiativeDecisionUsage; attempts: number; messageRepairs?: number; reasoning?: InitiativeDecisionReasoning; declared?: Record<string, unknown>; savedTokens?: number };
 /** Why the host did not admit a decided action; the next decision sees it as `previousDecision` at the request tail. */
 export interface InitiativeAdmission { status: 'not_admitted'; reason: 'exact_duplicate' | 'already_covered'; at: number; ledgerId?: string }
 /** Which actions a decision carries as recentActions (the host projection uses the same predicate), and how many. */
@@ -724,8 +727,9 @@ export class InitiativeCoordinator {
   updatePolicy(patch: Pick<InitiativePolicy, 'enabled' | 'notificationMuted' | 'deferWhileTyping' | 'cooldownMs' | 'tokenBudget' | 'workBudgetTokens' | 'learnBudgetTokens' | 'learnNotBefore' | 'maxConcurrent' | 'reviewMinMs' | 'reviewMaxMs'>): Promise<Required<InitiativePolicy>>;
   /** decisionEnabled:false drains already admitted actions but skips new model decisions; it never changes persisted user enablement. */
   /** cacheWindowUntil: end (ms) of the provider cache TTL of the last same-prefix request; see cacheAlignedReviewDue. */
+  /** declaredDecision: a decision the host already holds (a finished run declared its own follow-up): validated like a model's decision and made without a request, free of charge; if it does not validate, or a failure review is owed, the model is asked. The action it admits keeps `meta` as `hostDeclared`. */
   /** wakeFloor wakes (the host's backstop timer) keep the rest the last `wait` asked for while nothing new arrived and the request is unchanged apart from the clock (result `unchanged_since_wait`, nothing sent or charged); `unchangedRest: false` asks anyway (a bypass the host forces). */
-  tick(options?: { presence?: Presence; signal?: AbortSignal; decisionEnabled?: boolean; cacheWindowUntil?: number; wakeFloor?: boolean; unchangedRest?: boolean }): Promise<InitiativeTickResult>;
+  tick(options?: { presence?: Presence; signal?: AbortSignal; decisionEnabled?: boolean; cacheWindowUntil?: number; wakeFloor?: boolean; unchangedRest?: boolean; declaredDecision?: { decision: InitiativeDecision; meta?: Record<string, unknown> } }): Promise<InitiativeTickResult>;
   /** Whether a tick with these options would request a decision now (every gate tick applies after draining except the request-size budget check), without side effects. Ask a judge about a review only when it is true. */
   decisionDue(options?: { cacheWindowUntil?: number; wakeFloor?: boolean }): boolean;
   interrupt(reason?: string, options?: { cancelQueued?: boolean }): void;

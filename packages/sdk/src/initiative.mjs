@@ -907,6 +907,20 @@ export class InitiativeCoordinator {
     return gate(null);
   }
   /**
+   * A decision the host holds already (`tick({ declaredDecision: { decision, meta } })`): the run that just finished declared its
+   * own follow-up (a task, or none), so the host makes the decision the review would have made, without a request. It goes through
+   * the same validation as a model's decision (a work needs a valid evidence id, an assessment the host's rhythm asks for is not
+   * something it can supply); anything that does not validate returns null and the model is asked as before. Free of charge,
+   * and recorded like any decision (`lastDecision.declared`, the action row's `hostDeclared`).
+   */
+  _declaredOutcome(input, { events, availableActions }) {
+    if (!input || typeof input !== 'object' || !input.decision || typeof input.decision !== 'object') return null;
+    try {
+      const decision = validateInitiativeDecision(clone(input.decision), { events, availableActions: [...new Set(['wait', ...advertisedActions(this.project, availableActions)])], project: this.project });
+      return { status: 'decided', decision, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 }, usageReported: true, attempts: 0, reasoning: { effective: 'host', routed: null, configured: this.model?.reasoning ?? 'off', source: 'declared' }, declared: { ...(input.meta && typeof input.meta === 'object' ? clone(input.meta) : {}) } };
+    } catch { return null; }
+  }
+  /**
    * The request a decision now would send, without what only the clock changes, as a hash and its size: the situation a
    * wait was made in (MAX_REST_MS). The clock and the host's `restIgnore` views are left out of the project; the rest of
    * the request (system prompt, contracts, events, receipts, presence, policy) is exactly what the model reads.
@@ -936,7 +950,7 @@ export class InitiativeCoordinator {
     if (this._decisionGate({ cacheWindowUntil, wakeFloor }).wait || !configured(this.model)) return false;
     return !(this.state.actions.filter(action => ['queued', 'running', 'paused', 'needs_review'].includes(action.status)).length >= this.policy.maxPendingActions || this.archiveHistory && this.state.actions.length >= this.policy.maxHistory + this.policy.maxPendingActions);
   }
-  async tick({ presence = {}, signal, decisionEnabled = true, cacheWindowUntil, wakeFloor = false, unchangedRest = true } = {}) {
+  async tick({ presence = {}, signal, decisionEnabled = true, cacheWindowUntil, wakeFloor = false, unchangedRest = true, declaredDecision } = {}) {
     if (typeof decisionEnabled !== 'boolean') throw new InitiativeError('decisionEnabled must be boolean', 'invalid_policy');
     if (typeof unchangedRest !== 'boolean') throw new InitiativeError('unchangedRest must be boolean', 'invalid_policy');
     if (this.closed) throw new InitiativeError('Initiative coordinator is closed', 'closed');
@@ -985,8 +999,10 @@ export class InitiativeCoordinator {
       const situation = this._situation({ events, availableActions, promptActions, presence, recentActions, previousDecision, scheduleVersion });
       const restUntil = unchangedRest && wakeFloor ? this._restUntil(situation.key, changed) : null;
       if (restUntil !== null) return { status: 'idle', reason: 'unchanged_since_wait', restUntil, savedTokens: Math.ceil(situation.bytes / 3), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length };
-      const reserve = Buffer.byteLength(decisionPrompt(this.project, promptActions, scheduleVersion) + requestText({ project: this.project, events, availableActions, presence, policy: this.policy, recentActions, previousDecision })) + this.policy.decisionMaxTokens + 512;
-      if (reserve > this._remaining()) return { status: 'blocked', reason: 'budget_exhausted', remainingTokens: this._remaining() };
+      // A decision the host holds (the finished run's own declaration) is made here, free of charge, unless a failure review is owed or it does not validate.
+      const declared = declaredDecision && !this.state.pendingFailureReview ? this._declaredOutcome(declaredDecision, { events, availableActions }) : null;
+      const reserve = declared ? 0 : Buffer.byteLength(decisionPrompt(this.project, promptActions, scheduleVersion) + requestText({ project: this.project, events, availableActions, presence, policy: this.policy, recentActions, previousDecision })) + this.policy.decisionMaxTokens + 512;
+      if (!declared && reserve > this._remaining()) return { status: 'blocked', reason: 'budget_exhausted', remainingTokens: this._remaining() };
       this.state.reservedTokens += reserve;
       // A genuine failed operation gets one prompt diagnostic review per set
       // of external evidence. It is a receipt change, never a learnable event.
@@ -994,7 +1010,7 @@ export class InitiativeCoordinator {
       const pendingFailureReview = this.state.pendingFailureReview, priorFailureReviewKey = this.state.lastFailureReviewEvidenceKey;
       if (pendingFailureReview) { this.state.lastFailureReviewEvidenceKey = pendingFailureReview.evidenceKey; delete this.state.pendingFailureReview; }
       try { await this._persist({ reservationAdmission: true }); } catch (error) { this.state.reservedTokens -= reserve; if (pendingFailureReview) this.state.pendingFailureReview = pendingFailureReview; this.state.lastFailureReviewEvidenceKey = priorFailureReviewKey; throw error; }
-      this._emit({ type: 'initiative_decision_started' });
+      if (!declared) this._emit({ type: 'initiative_decision_started' });
       let outcome, routed;
       this.decisionAbort = new AbortController();
       const decisionSignal = AbortSignal.any([signal, this.decisionAbort.signal]);
@@ -1002,6 +1018,8 @@ export class InitiativeCoordinator {
       // that was estimated because the provider reported nothing.
       let spent = { totalTokens: 0, estimatedTokens: 0 };
       try {
+        if (declared) outcome = declared;
+        else {
         if (this.decisionReasoning) {
           // The host's effort choice for this request: the exact request data (it may keep it for a replay study), never the model or its key.
           const lastDecision = this.state.lastDecision ? { at: this.state.lastDecision.at, action: this.state.lastDecision.action, evidenceIds: clone(this.state.lastDecision.evidenceIds ?? []) } : null;
@@ -1018,6 +1036,7 @@ export class InitiativeCoordinator {
         const reasoning = routed && typeof routed === 'object' && REASONING_VALUES.has(routed.reasoning) ? routed.reasoning : undefined;
         const reasoningRecord = reasoning && routed.record && typeof routed.record === 'object' && !Array.isArray(routed.record) ? routed.record : undefined;
         outcome = await decideInitiative({ project: this.project, events, availableActions, promptActions, presence, policy: this.policy, recentActions, previousDecision, model: this.model, apiKey: this.apiKey, provider: this.provider, redactValues: this.redactValues, sharedPrefix: this.sharedPrefix, messageCheck: this.messageCheck, previousPrompt: this.lastPrompt, maxAttempts: this.policy.decisionAttempts, signal: decisionSignal, schedulePromptVersion: scheduleVersion, ...(reasoning ? { reasoning, ...(reasoningRecord ? { reasoningRecord } : {}) } : {}) });
+        }
       } catch (error) {
         if (error.completionPending) this._trackUnsettled(error.completionPending);
         // Reported usage plus the estimate of an attempt that reported none; the admission reserve only when the error
@@ -1075,15 +1094,15 @@ export class InitiativeCoordinator {
           // Project assessment belongs to the decision receipt, not an effect's
           // execution intent, handler payload or separately archived action.
           const actionDecision = clone(outcome.decision); delete actionDecision.rhythm; delete actionDecision.judgmentPolicy;
-          this.state.actions.push({ ...actionDecision, id: randomUUID(), intentKey: key, revision, status: 'queued', createdAt: this.now() });
+          this.state.actions.push({ ...actionDecision, id: randomUUID(), intentKey: key, revision, status: 'queued', createdAt: this.now(), ...(declared ? { hostDeclared: clone(declared.declared) } : {}) });
         } else {
           this.state.idleCount = previousIdleCount + 1; this._scheduleReview(outcome.decision.nextReviewAfterMs, this.state.idleCount);
           admission = { status: 'not_admitted', reason: duplicate ? 'exact_duplicate' : 'already_covered', at: this.now(), ...(covered?.ledgerId ? { ledgerId: covered.ledgerId } : {}) };
         }
       }
-      this.state.lastDecision = { ...outcome.decision, revision, at: this.now(), situation: situation.key, ...(admission ? { admission } : {}), ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract), timeoutPolicy: clone(outcome.timeoutPolicy) }; await this._persist();
+      this.state.lastDecision = { ...outcome.decision, revision, at: this.now(), situation: situation.key, ...(declared ? { declared: true } : {}), ...(admission ? { admission } : {}), ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract), timeoutPolicy: clone(outcome.timeoutPolicy) }; await this._persist();
       this._emit({ type: 'initiative_decision', decision: outcome.decision, ...(admission ? { admission: clone(admission) } : {}), usage: outcome.usage, ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), responseContract: clone(outcome.responseContract) }); await this._drain(presence, signal);
-      return { status: 'decided', decision: outcome.decision, admitted: admission === null, ...(admission ? { admission: clone(admission) } : {}), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length, usage: spent, attempts: outcome.attempts, ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), ...(outcome.prompt ? { prompt: outcome.prompt } : {}) };
+      return { status: 'decided', decision: outcome.decision, ...(declared ? { declared: clone(declared.declared), savedTokens: Math.ceil(situation.bytes / 3) } : {}), admitted: admission === null, ...(admission ? { admission: clone(admission) } : {}), running: this.active.size, deferred: this.state.actions.filter(action => action.status === 'queued').length, usage: spent, attempts: outcome.attempts, ...(outcome.messageRepairs ? { messageRepairs: outcome.messageRepairs } : {}), ...(outcome.reasoning ? { reasoning: clone(outcome.reasoning) } : {}), ...(outcome.prompt ? { prompt: outcome.prompt } : {}) };
     } finally { this.decisionAbort = null; this.ticking = false; tickFinished(); }
   }
   async _drain(presence, signal) {

@@ -61,7 +61,9 @@ export function completionFacts(project, action) {
   const clean = action?.status === 'completed' && (!job || job.status === 'completed');
   const resolves = Array.isArray(action?.resolves) ? action.resolves.filter(id => typeof id === 'string' && id) : [];
   const kind = !clean ? 'needs_review' : job?.unreported === true ? 'unreported' : action?.hostSchedule ? 'schedule_occurrence' : resolves.length ? 'resolves_pending' : !handoff ? 'no_handoff' : 'judge';
-  return { class: kind, route: FACT_ROUTE[kind] ?? null, handoff, changed: countBucket(files), change: change.status, resolves: resolves.length };
+  // What the run declared about its own follow-up (declared-follow-up.mjs), for the report: a run that declared is settled by the host, not reviewed.
+  const declared = ['none', 'task'].includes(job?.followUp?.kind) ? job.followUp.kind : null;
+  return { class: kind, route: FACT_ROUTE[kind] ?? null, handoff, changed: countBucket(files), change: change.status, resolves: resolves.length, declared };
 }
 
 // ------------------------------------------------------------------ the comparison

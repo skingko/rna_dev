@@ -53,9 +53,24 @@ export function extractHandoff(text) {
   const line = matches.at(-1)?.[1]?.replace(/^["'“]+|["'”]+$/g, '');
   return line && line.trim() ? oneLine(line) : null;
 }
-/** The worker's final response without its host-protocol handoff line (the
- * one line the host asked for and reads itself); the rest is delivered as written. */
+/**
+ * The follow-up a run declares about itself: one line `FOLLOW-UP: none` (nothing needs a later check) or
+ * `FOLLOW-UP: <one concrete task>` (a bounded check to run next). The host reads it like the handoff line: it is the agent's own
+ * statement, not text the host interprets, and anything that is neither is no declaration (the host then reviews the run as
+ * before). A task over FOLLOW_UP_MAX characters, or under 8, is not a task.
+ */
+export const FOLLOW_UP_MAX = 600;
+const FOLLOW_UP_LINE = /^[ \t>*_-]*FOLLOW[ -]?UP[ \t*_]*[:：][ \t]*(.+)$/gim;
+export function extractFollowUp(text) {
+  const raw = [...String(text ?? '').matchAll(FOLLOW_UP_LINE)].at(-1)?.[1]?.replace(/^["'“*_\s]+|["'”*_\s]+$/g, '').replace(/\s+/g, ' ');
+  if (!raw) return null;
+  if (/^none\.?$/i.test(raw)) return { kind: 'none' };
+  return raw.length >= 8 && raw.length <= FOLLOW_UP_MAX ? { kind: 'task', task: raw } : null;
+}
+/** The worker's final response without its host-protocol lines (the handoff line and any follow-up declaration: the lines the
+ * host asked for and reads itself); the rest is delivered as written. */
 export function stripHandoff(text) {
   const value = String(text ?? ''), matches = [...value.matchAll(HANDOFF_LINE)], last = matches.at(-1);
-  return last ? (value.slice(0, last.index) + value.slice(last.index + last[0].length)).trim() : value.trim();
+  const body = last ? value.slice(0, last.index) + value.slice(last.index + last[0].length) : value;
+  return body.replace(FOLLOW_UP_LINE, '').replace(/\n{3,}/g, '\n\n').trim();
 }

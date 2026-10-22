@@ -112,3 +112,15 @@ test('delivery.reach host template offers only tiers at or below the capped requ
   assert.equal(decisionVerdict(result.answers.reach_tier, result.policy), 'inbox');
   kernel.close();
 });
+
+test('a run declares its follow-up in one line: none, or one bounded task; anything else is no declaration', async () => {
+  const { extractFollowUp, stripHandoff, FOLLOW_UP_MAX } = await import('../src/proactive-message.mjs');
+  assert.deepEqual(extractFollowUp('Report text.\nFOLLOW-UP: none\nHANDOFF: done'), { kind: 'none' });
+  assert.deepEqual(extractFollowUp('Report.\n**Follow-up:** None.\nHANDOFF: done'), { kind: 'none' });
+  assert.deepEqual(extractFollowUp('Report.\nFOLLOW-UP: Re-check the one open row against the primary source today\nHANDOFF: done'), { kind: 'task', task: 'Re-check the one open row against the primary source today' });
+  assert.deepEqual(extractFollowUp('a\nFOLLOWUP: first task to do\nb\nFOLLOW UP: second task wins'), { kind: 'task', task: 'second task wins' }, 'the last declaration wins');
+  for (const text of ['no marker here', 'FOLLOW-UP:', 'FOLLOW-UP: ok', 'FOLLOW-UP: nothing', `FOLLOW-UP: ${'x'.repeat(FOLLOW_UP_MAX + 1)}`, 'We plan a follow-up later in the text']) assert.equal(extractFollowUp(text), null, text);
+  // The host's protocol lines never reach the user's message.
+  assert.equal(stripHandoff('Result: three items.\nFOLLOW-UP: none\nHANDOFF: done, nothing left'), 'Result: three items.');
+  assert.equal(stripHandoff('Result.\n\nFOLLOW-UP: Check the open row today\n\nMore result text.\nHANDOFF: done'), 'Result.\n\nMore result text.');
+});

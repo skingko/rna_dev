@@ -598,6 +598,16 @@ export class DecisionService {
     return this.reviewScored(point, project, options);
   }
   /**
+   * Whether a finished run's own declaration may settle the review of its completion (declared-follow-up.mjs): not when something
+   * that must reach the main model whatever a run said is there: a schedule due, an action waiting to be checked, a question the
+   * user has not answered, a failure, a foreground turn running, an overdue request of the user's.
+   */
+  declaredReviewAllowed(project, { evidence = [] } = {}) {
+    const { signals } = this.projection(project, { evidence });
+    if (signals.dueSchedule || signals.pendingReview || signals.unansweredQuestion || signals.severeFailure || signals.foregroundRunning) return false;
+    return !(this.openWork(project).overdue > 0);
+  }
+  /**
    * The signal that sends a review to the main model without asking the judge, or null. Only an action waiting to be
    * checked bypasses as pending work (PDL-2: queued or running work reaches the gate); a delivery that just completed
    * during a foreground turn is judged too, since the turn may already cover it.
@@ -668,7 +678,7 @@ export class DecisionService {
     let started = 0;
     for (const action of completions) {
       if (this.completionJudged(action.id) || this.shadows.has(`${COMPLETION_POINT}:${project.id}:${action.id}`)) continue;
-      const others = othersOf(action), facts = completionFacts(project, action), info = { actionId: action.id, class: facts.class, change: facts.change, changed: facts.changed, real: bypass ?? 'judged', ...(others ? { others } : {}) };
+      const others = othersOf(action), facts = completionFacts(project, action), info = { actionId: action.id, class: facts.class, change: facts.change, changed: facts.changed, real: bypass ?? 'judged', ...(facts.declared ? { declared: facts.declared } : {}), ...(others ? { others } : {}) };
       if (facts.route) { this.recordCompletion(project, info, { basis: 'code_fact', route: facts.route, reason: `completion_${facts.class}` }); started++; continue; }
       // The judge call runs in parallel with the real review and never blocks it (shadow(): bounded, one per run).
       this.shadow(`${COMPLETION_POINT}:${project.id}:${action.id}`, () => this.completionScored(project, action, facts, info));
