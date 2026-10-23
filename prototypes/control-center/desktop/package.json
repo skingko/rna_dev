@@ -1,7 +1,7 @@
 {
   "name": "rna-agent-desktop",
   "private": true,
-  "version": "0.76.0",
+  "version": "0.77.0",
   "license": "Apache-2.0",
   "main": "main.cjs",
   "description": "Rna Agent 桌面应用，含独立 SDK、受管本机服务和命令行",

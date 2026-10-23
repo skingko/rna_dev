@@ -1,5 +1,36 @@
 [
   {
+    "version": "0.77.0",
+    "sdk": "0.61.0",
+    "date": "2026-10-23",
+    "title": {
+      "zh": "新的自动检查要先过独立出题这一关",
+      "en": "A new automatic check now has to pass cases written by someone who has not seen it"
+    },
+    "items": [
+      {
+        "zh": "你给项目定的规则，可以被写成“自动检查”：写完文件后跑一小段程序查违规。以前这段程序和它要通过的两个样例出自同一次模型调用，样例就是程序能过的样子，所以几乎一定通过。现在多一道门：另一次调用只看规则、不看程序，写 3 个违规样例（明显的、换种写法的、夹在正文里的）和 3 个合规样例（其中 2 个是看着很像但没违规的），再逐个交给程序跑。",
+        "en": "A rule you give a project can become an automatic check: a small program that looks for violations after a file is written. Until now the program and the two samples it had to pass came from one model call, so the samples were exactly what the program could pass. There is now one more gate: a second call that sees only the rule, not the program, writes 3 violating samples (a blatant one, one worded differently, one buried in text) and 3 compliant ones (two of them close to the rule but not breaking it), and the program is run on each."
+      },
+      {
+        "zh": "写样例的一方认为单个文件无法看出规则是否被违反（比如“每写 100 章做一次总结”“呼应要有伏笔”），就不建检查，这条规则照旧写进做法里。漏掉了违规样例的检查，会把漏掉的样例交给作者改一次；改后仍把合规样例误报成违规的，会作为“试用”启用并写明原因。",
+        "en": "If the writer finds no way a single file could show the rule broken (such as “summarize every 100 chapters” or “every callback needs a setup”), no check is built and the rule is written into the working rules as before. A check that misses the violating samples is handed those samples once to revise; one that still flags compliant samples goes on as a trial, with the reason noted."
+      },
+      {
+        "zh": "修改一个已有的检查时，原来的检查遇到过的所有样例（包括这些独立样例）都必须继续通过，否则这次修改不采用，原检查照常运行。",
+        "en": "When an existing check is revised, every sample the old one met, these independent ones included, must still pass; otherwise the revision is dropped and the old check keeps running."
+      },
+      {
+        "zh": "起因：线上 11 个自动检查里，有 4 个创建时通过了自己的样例，几天后才被重新判断为“程序查不出这条规则”并停用；用 12 个线上检查做独立写样例的试验，写样例的一方对其中 8 个标为“查不出”的检查判了 13/16 次不可写，对程序确实能查的“守夜人”检查没有误判，也找出了三个检查里真实的误报（例如日报引用了 UTC 来源时间并已折算成北京时间，仍被标为违规）。",
+        "en": "It came from the live data: of 11 automatic checks, 4 passed their own samples at creation and were only days later judged to be something a program cannot check, and retired. In a trial on the 12 live checks, the independent writer called 13 of 16 verdicts “cannot be shown in one file” on the 8 checks labelled not checkable, never on the check a program really can do, and exposed three real false alarms (for example, a daily report that cites a UTC source time already converted to Beijing time was still flagged)."
+      },
+      {
+        "zh": "代价：每个新检查多 1 次小的模型调用（约几千 token），需要改一次时再多 1 次；没有可用模型时跳过这道门，和以前一样。已有的检查不回头重审。",
+        "en": "The cost: one small extra model call per new check (a few thousand tokens), one more when it needs a revision. Without a usable model the gate is skipped, as before. Existing checks are not re-audited."
+      }
+    ]
+  },
+  {
     "version": "0.76.0",
     "sdk": "0.61.0",
     "date": "2026-10-22",
